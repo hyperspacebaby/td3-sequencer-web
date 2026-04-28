@@ -490,17 +490,13 @@ function patternToSysex() {
 
   // Rest bitmask (0x76-0x79): bitmask, bit=1 means RESTING, active steps clear bit
   // Layout: xxxx7654 xxxx3210 xxxxFEDC xxxxBA98
+  const REST_BYTE_MAP = [1, 0, 3, 2]; // steps 0-3→byte[1], 4-7→byte[0], 8-11→byte[3], 12-15→byte[2]
   let restBits = [0x0F, 0x0F, 0x0F, 0x0F];
   for (let i = 0; i < 16; i++) {
     if (p.steps[i].gate === 'on') {
-      const byteIdx = Math.floor(i / 4);
-      const bitIdx  = i % 4;
-      // bit position within nibble: step 0→bit0, step 1→bit1... but layout is inverted
-      // layout per spec: xxxx7654 xxxx3210 xxxxFEDC xxxxBA98
-      // byte0 nibble: steps 7,6,5,4; byte1 nibble: steps 3,2,1,0
-      // byte2 nibble: steps F,E,D,C; byte3 nibble: steps B,A,9,8
-      const stepInNibble = 3 - bitIdx; // bit3=first step in group
-      restBits[byteIdx] &= ~(1 << stepInNibble);
+      const b   = REST_BYTE_MAP[Math.floor(i / 4)];
+      const bit = 3 - (i % 4);
+      restBits[b] &= ~(1 << bit);
     }
   }
   msg.push(...restBits);
