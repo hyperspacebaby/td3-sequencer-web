@@ -533,7 +533,7 @@ function td3SlotBytes() {
   const grp  = (state.group - 1) & 0x03;          // 0-3
   const bank = parseInt(state.bank, 10) - 1;       // 0-7
   const sec  = state.section === 'A' ? 0 : 1;      // 0 or 1
-  const pat  = bank + (sec * 8);                  // 0-7 (A) or 8-15 (B)
+  const pat  = bank + (sec * 8) + 1;               // 1-8 (A) or 9-16 (B)
   return [grp, pat];
 }
 
@@ -541,7 +541,7 @@ function td3SlotBytes() {
 function patternToSysex() {
   const p  = state.pattern;
   const [grp, pat] = td3SlotBytes();
-  const msg = [0xF0, ...TD3_HDR, 0x76, grp, pat, 0x00, 0x00];
+  const msg = [0xF0, ...TD3_HDR, 0x78, grp, pat, 0x00, 0x00];
 
   // Pitches: 16 steps × 2 bytes (MSB nibble, LSB nibble)
   // TD-3 pitch is one octave lower than MIDI standard.
@@ -579,9 +579,9 @@ function patternToSysex() {
   // Triplet mode (0x6C-0x6D): off
   msg.push(0x00, 0x00);
 
-  // Step count (0x6E-0x6F): split as 2-byte nibble pair
+  // Step count (0x6E-0x6F): MSB=0x01 if len>8, LSB=len-1 (spec: LSB range 0x00-0x0F)
   const len = Math.max(1, Math.min(16, p.length));
-  msg.push(len > 8 ? 0x01 : 0x00, len > 8 ? (len - 9) : (len - 1));
+  msg.push(len > 8 ? 0x01 : 0x00, len - 1);
 
   // Unknown (0x70-0x71)
   msg.push(0x00, 0x00);
@@ -590,17 +590,14 @@ function patternToSysex() {
   msg.push(0x00, 0x00, 0x00, 0x00);
 
   // Rest bitmask (0x76-0x79): bitmask, bit=1 means RESTING, active steps clear bit
-  // Layout: xxxx7654 xxxx3210 xxxxFEDC xxxxBA98
+  // Spec layout: xxxx7654 xxxx3210 xxxxFEDC xxxxBA98
+  // byte0=steps4-7, byte1=steps0-3, byte2=steps12-15, byte3=steps8-11
+  const BYTE_FOR_STEP = [1,1,1,1, 0,0,0,0, 3,3,3,3, 2,2,2,2];
   let restBits = [0x0F, 0x0F, 0x0F, 0x0F];
   for (let i = 0; i < 16; i++) {
     if (p.steps[i].gate === 'on') {
-      const byteIdx = Math.floor(i / 4);
-      const bitIdx  = i % 4;
-      // bit position within nibble: step 0→bit0, step 1→bit1... but layout is inverted
-      // layout per spec: xxxx7654 xxxx3210 xxxxFEDC xxxxBA98
-      // byte0 nibble: steps 7,6,5,4; byte1 nibble: steps 3,2,1,0
-      // byte2 nibble: steps F,E,D,C; byte3 nibble: steps B,A,9,8
-      const stepInNibble = 3 - bitIdx; // bit3=first step in group
+      const byteIdx      = BYTE_FOR_STEP[i];
+      const stepInNibble = 3 - (i % 4);
       restBits[byteIdx] &= ~(1 << stepInNibble);
     }
   }
@@ -633,10 +630,12 @@ function sysexToPattern(data) {
     const sBase  = 0x4C + i * 2;
     const slide  = data[sBase + 1] === 0x01;
 
-    // Rest bitmask: 0x76-0x79
-    const byteIdx      = Math.floor(i / 4);
+    // Rest bitmask: 0x76-0x79 — spec layout: xxxx7654 xxxx3210 xxxxFEDC xxxxBA98
+    // byte0=steps4-7, byte1=steps0-3, byte2=steps12-15, byte3=steps8-11
+    const REST_BYTE_FOR_STEP = [1,1,1,1, 0,0,0,0, 3,3,3,3, 2,2,2,2];
+    const restByteIdx  = REST_BYTE_FOR_STEP[i];
     const stepInNibble = 3 - (i % 4);
-    const isRest       = (data[0x76 + byteIdx] >> stepInNibble) & 1;
+    const isRest       = (data[0x76 + restByteIdx] >> stepInNibble) & 1;
 
     steps.push({
       pitch: semitone,
@@ -650,7 +649,7 @@ function sysexToPattern(data) {
   // Step count
   const scMsb = data[0x6E];
   const scLsb = data[0x6F];
-  const length = scMsb === 0x01 ? (scLsb + 9) : (scLsb + 1);
+  const length = scLsb + 1; // spec: LSB = len-1 always; MSB just indicates >8 range
 
   state.pattern.steps = steps;
   state.pattern.length = Math.max(1, Math.min(16, length));
