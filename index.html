@@ -427,12 +427,13 @@ function loadPattern(){
 // SysEx header common to all TD-3 messages: F0 00 20 32 00 01 0A ... F7
 const TD3_HDR = [0x00, 0x20, 0x32, 0x00, 0x01, 0x0A];
 
-// Group 1-4 → 0-3 ; Bank '1'-'8' → 0-7; Section 'A'/'B' → 1-8 / 9-16
+// Group 1-4 → 0-3 ; Bank 1-8 × Section A/B → pattern 1-16
+// TD-3 stores: bank1A=1, bank1B=2, bank2A=3, bank2B=4 ... bank8B=16
 function td3SlotBytes() {
-  const grp  = (state.group - 1) & 0x03;          // 0-3
+  const grp = (state.group - 1) & 0x03;           // 0-3
   const bank = parseInt(state.bank, 10) - 1;       // 0-7
   const sec  = state.section === 'A' ? 0 : 1;      // 0 or 1
-  const pat  = bank + (sec * 8) + 1;               // 1-8 (A) or 9-16 (B)
+  const pat  = (bank * 2) + sec + 1;               // 1-16
   return [grp, pat];
 }
 
