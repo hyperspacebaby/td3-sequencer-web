@@ -146,9 +146,9 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   </div>
   <div class="stepper">
     <span class="stepper-label">LEN</span>
-    <button class="stepper-btn" onclick="setLen(state.length-1)">−</button>
+    <button class="stepper-btn" onclick="setLen(state.pattern.length-1)">−</button>
     <span class="stepper-value" id="len-val">16</span>
-    <button class="stepper-btn" onclick="setLen(state.length+1)">+</button>
+    <button class="stepper-btn" onclick="setLen(state.pattern.length+1)">+</button>
   </div>
   <div class="stepper">
     <span class="stepper-label">ZOOM</span>
@@ -176,7 +176,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 <div class="footer">
   <button class="footer-btn" onclick="fetchFromTD3()">↓ FROM TD-3</button>
   <button class="footer-btn" onclick="sendToTD3()">↑ TO TD-3</button>
-  <span class="footer-hint">Tap cell to set note · Tap again to clear · OCT/ACC/SLD per step</span>
+  <span class="footer-hint">FROM TD-3 requires Input+Output selected · SysEx via USB only</span>
 </div>
 
 </div>
@@ -265,7 +265,7 @@ function triggerNote(midi,dur,accent,slide){
 // MIDI
 function initMidi(){
   if(!navigator.requestMIDIAccess){flash('Web MIDI not supported in this browser');return;}
-  navigator.requestMIDIAccess({sysex:false}).then(access=>{
+  navigator.requestMIDIAccess({sysex:true}).then(access=>{
     state.midiAccess=access;
     access.onstatechange=()=>renderMidiStatus();
     renderMidiStatus();
@@ -422,8 +422,201 @@ function loadPattern(){
     else flash('Slot is empty');
   }catch(e){flash('Load failed');}
 }
-function sendToTD3(){flash(state.outId?'Sent to TD-3':'TD-3 not connected');}
-function fetchFromTD3(){flash(state.outId?'No reply from TD-3':'TD-3 not connected');}
+// ── TD-3 SysEx helpers ────────────────────────────────────────────────────────
+// Protocol from https://303patterns.com/td3-midi.html (Brad Isbell, AudioPump)
+// SysEx header common to all TD-3 messages: F0 00 20 32 00 01 0A ... F7
+const TD3_HDR = [0x00, 0x20, 0x32, 0x00, 0x01, 0x0A];
+
+// Group 1-4 → 0-3 ; Bank '1'-'8' → 0-7; Section 'A'/'B' → 1-8 / 9-16
+function td3SlotBytes() {
+  const grp  = (state.group - 1) & 0x03;          // 0-3
+  const bank = parseInt(state.bank, 10) - 1;       // 0-7
+  const sec  = state.section === 'A' ? 0 : 1;      // 0 or 1
+  const pat  = bank + (sec * 8) + 1;               // 1-8 (A) or 9-16 (B)
+  return [grp, pat];
+}
+
+// Convert app pattern → TD-3 SysEx 0x78 payload
+function patternToSysex() {
+  const p  = state.pattern;
+  const [grp, pat] = td3SlotBytes();
+  const msg = [0xF0, ...TD3_HDR, 0x78, grp, pat, 0x00, 0x00];
+
+  // Pitches: 16 steps × 2 bytes (MSB nibble, LSB nibble)
+  // TD-3 pitch is one octave lower than MIDI standard.
+  // We store raw semitone 0-12 (C..C+octave), no octave offset needed here.
+  const NULL_PITCH = 0x18; // canonical null = C2 in TD-3 land
+  for (let i = 0; i < 16; i++) {
+    const s = p.steps[i];
+    if (s.gate === 'on') {
+      // Add octave offset: base octave 3 * 12 = 36 midi, TD-3 is -12 = 24
+      // But we encode relative to TD-3's 0x00=C, so pitch 0-12 maps 0x00-0x0C
+      // with s.octave (-1/0/1) shifting MSB nibble
+      const rawPitch = s.pitch & 0x0F;         // 0-11 (semitone)
+      const msb = (s.octave < 0) ? 0x00 : (s.octave > 0 ? 0x02 : 0x01);
+      msg.push(msb, rawPitch);
+    } else {
+      msg.push(0x00, NULL_PITCH & 0x0F); // null/rest = 0x18 split: 0x01 0x08
+      // canonical: 0x00 0x18 — use 0x00 0x00 as rest
+      msg[msg.length - 2] = 0x00;
+      msg[msg.length - 1] = 0x00;
+    }
+  }
+
+  // Accent: 16 steps × 2 bytes
+  for (let i = 0; i < 16; i++) {
+    const s = p.steps[i];
+    msg.push(0x00, (s.gate === 'on' && s.accent) ? 0x01 : 0x00);
+  }
+
+  // Slide: 16 steps × 2 bytes
+  for (let i = 0; i < 16; i++) {
+    const s = p.steps[i];
+    msg.push(0x00, (s.gate === 'on' && s.slide) ? 0x01 : 0x00);
+  }
+
+  // Triplet mode (0x6C-0x6D): off
+  msg.push(0x00, 0x00);
+
+  // Step count (0x6E-0x6F): split as 2-byte nibble pair
+  const len = Math.max(1, Math.min(16, p.length));
+  msg.push(len > 8 ? 0x01 : 0x00, len > 8 ? (len - 9) : (len - 1));
+
+  // Unknown (0x70-0x71)
+  msg.push(0x00, 0x00);
+
+  // Tie (0x72-0x75): all zeros (no tie info in our model)
+  msg.push(0x00, 0x00, 0x00, 0x00);
+
+  // Rest bitmask (0x76-0x79): bitmask, bit=1 means RESTING, active steps clear bit
+  // Layout: xxxx7654 xxxx3210 xxxxFEDC xxxxBA98
+  let restBits = [0x0F, 0x0F, 0x0F, 0x0F];
+  for (let i = 0; i < 16; i++) {
+    if (p.steps[i].gate === 'on') {
+      const byteIdx = Math.floor(i / 4);
+      const bitIdx  = i % 4;
+      // bit position within nibble: step 0→bit0, step 1→bit1... but layout is inverted
+      // layout per spec: xxxx7654 xxxx3210 xxxxFEDC xxxxBA98
+      // byte0 nibble: steps 7,6,5,4; byte1 nibble: steps 3,2,1,0
+      // byte2 nibble: steps F,E,D,C; byte3 nibble: steps B,A,9,8
+      const stepInNibble = 3 - bitIdx; // bit3=first step in group
+      restBits[byteIdx] &= ~(1 << stepInNibble);
+    }
+  }
+  msg.push(...restBits);
+  msg.push(0xF7);
+  return msg;
+}
+
+// Parse TD-3 SysEx 0x78 response → update app state
+function sysexToPattern(data) {
+  // data is Uint8Array; index 0x07=cmd, 0x08=grp, 0x09=pat, 0x0A-0x0B=??
+  // 0x0C..0x2B = pitches (32 bytes = 16×2)
+  // 0x2C..0x4B = accent (32 bytes)
+  // 0x4C..0x6B = slide (32 bytes)
+  // 0x6C-0x6D = triplet
+  // 0x6E-0x6F = step count
+  // 0x72-0x75 = tie
+  // 0x76-0x79 = rest bitmask
+  const steps = [];
+  for (let i = 0; i < 16; i++) {
+    const pBase = 0x0C + i * 2;
+    const msb   = data[pBase];
+    const lsb   = data[pBase + 1];
+    const pitch = ((msb & 0x0F) << 4) | (lsb & 0x0F); // combined 8-bit value
+    const semitone = pitch & 0x0F;                      // lower nibble = semitone
+    const octave   = (msb === 0x00) ? -1 : (msb === 0x02 ? 1 : 0);
+
+    const aBase  = 0x2C + i * 2;
+    const accent = data[aBase + 1] === 0x01;
+    const sBase  = 0x4C + i * 2;
+    const slide  = data[sBase + 1] === 0x01;
+
+    // Rest bitmask: 0x76-0x79
+    const byteIdx      = Math.floor(i / 4);
+    const stepInNibble = 3 - (i % 4);
+    const isRest       = (data[0x76 + byteIdx] >> stepInNibble) & 1;
+
+    steps.push({
+      pitch: semitone,
+      gate: isRest ? 'rest' : 'on',
+      octave,
+      accent,
+      slide
+    });
+  }
+
+  // Step count
+  const scMsb = data[0x6E];
+  const scLsb = data[0x6F];
+  const length = scMsb === 0x01 ? (scLsb + 9) : (scLsb + 1);
+
+  state.pattern.steps = steps;
+  state.pattern.length = Math.max(1, Math.min(16, length));
+}
+
+function sendToTD3() {
+  if (!state.outId) { flash('TD-3 not connected'); return; }
+  const out = state.midiAccess && state.midiAccess.outputs.get(state.outId);
+  if (!out) { flash('TD-3 output not found'); return; }
+  try {
+    const sysex = patternToSysex();
+    // Web MIDI requires sysex:true in requestMIDIAccess — re-request if needed
+    if (!state.midiAccess.sysexEnabled) {
+      flash('Enable SysEx in MIDI permissions');
+      return;
+    }
+    out.send(sysex);
+    flash(`→ TD-3 G${state.group}·B${state.bank}·${state.section} saved`);
+  } catch(e) { flash('Send error: ' + e.message); }
+}
+
+function fetchFromTD3() {
+  if (!state.outId || !state.inId) {
+    flash((!state.outId && !state.inId) ? 'TD-3 not connected' : (!state.outId ? 'No MIDI output' : 'No MIDI input — select input device'));
+    return;
+  }
+  const out = state.midiAccess && state.midiAccess.outputs.get(state.outId);
+  const inp = state.midiAccess && state.midiAccess.inputs.get(state.inId);
+  if (!out || !inp) { flash('MIDI device not found'); return; }
+  if (!state.midiAccess.sysexEnabled) { flash('Enable SysEx in MIDI permissions'); return; }
+
+  const [grp, pat] = td3SlotBytes();
+  // Request Pattern: F0 00 20 32 00 01 0A 77 <group> <pattern> F7
+  const req = [0xF0, ...TD3_HDR, 0x77, grp, pat, 0xF7];
+
+  let timeoutId = null;
+  function onMsg(e) {
+    const d = e.data;
+    // Check header: F0 00 20 32 00 01 0A 78
+    if (d.length < 8) return;
+    if (d[0] !== 0xF0) return;
+    if (d[1]!==0x00||d[2]!==0x20||d[3]!==0x32||d[4]!==0x00||d[5]!==0x01||d[6]!==0x0A) return;
+    if (d[7] !== 0x78) return;
+    clearTimeout(timeoutId);
+    inp.onmidimessage = null;
+    try {
+      sysexToPattern(d);
+      renderSeq();
+      renderTransport();
+      flash(`← TD-3 G${state.group}·B${state.bank}·${state.section} loaded`);
+    } catch(err) { flash('Parse error: ' + err.message); }
+  }
+
+  inp.onmidimessage = onMsg;
+  timeoutId = setTimeout(() => {
+    inp.onmidimessage = null;
+    flash('No reply from TD-3 (timeout)');
+  }, 3000);
+
+  try {
+    out.send(req);
+  } catch(e) {
+    inp.onmidimessage = null;
+    clearTimeout(timeoutId);
+    flash('Request error: ' + e.message);
+  }
+}
 
 // Toast
 function flash(msg){
