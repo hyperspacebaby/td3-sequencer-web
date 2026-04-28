@@ -483,8 +483,9 @@ function td3SlotBytes() {
 const TD3_OCT_BASE = [-1, 0x0C, 0, 0x18, 1, 0x24];
 
 function pitchToNibbles(semitone, octave) {
+  // TD-3-MO: add 1 to offset (C=0x19, C#=0x1A, ...)
   const base = octave < 0 ? 0x0C : octave > 0 ? 0x24 : 0x18;
-  const val  = (base + semitone) & 0xFF;
+  const val  = (base + semitone + 1) & 0xFF;
   return [(val >> 4) & 0x0F, val & 0x0F];
 }
 
@@ -492,9 +493,11 @@ function nibblesToPitch(ms, ls) {
   // Spec: "Pitches entered with the high 'C' on the TD-3 keyboard have their
   // top bit set high. Therefore, you'll want to bitwise AND against 0x7F."
   // Combine nibbles, mask off any high bit artifact
-  const val      = (((ms & 0x0F) << 4) | (ls & 0x0F)) & 0x7F;
+  // TD-3-MO: C key = 0x19, not 0x18. Subtract 1 to align with standard semitone mapping.
+  const raw    = (((ms & 0x0F) << 4) | (ls & 0x0F)) & 0x7F;
+  const val    = Math.max(0, raw - 1);
   const semitone = val % 12;
-  const octIdx   = Math.floor(val / 12); // 1=bassa(0x0C), 2=normale(0x18), 3=alta(0x24)
+  const octIdx   = Math.floor(val / 12); // 0=sub, 1=bassa, 2=normale, 3=alta
   const octave   = octIdx <= 1 ? -1 : octIdx >= 3 ? 1 : 0;
   return { semitone, octave };
 }
