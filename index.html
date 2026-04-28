@@ -235,30 +235,82 @@ let state = {
   zoom:40, mode:'forward',
   outId:null, inId:null,
   midiAccess:null, midiConnected:false,
-  stepRef:0, dirRef:1, intervalId:null
+  stepRef:0, dirRef:1, intervalId:null,
+  _lastMidiNote:undefined, _lastMidiSlide:false
 };
 
 // Audio context for preview
 let audioCtx = null;
 function getAudio(){if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)();return audioCtx;}
-function triggerNote(midi,dur,accent,slide){
+
+// Shared preview voice for slide legato
+let previewVoice = null;
+
+function triggerNote(midi, dur, accent, slide, prevMidi){
   try{
-    const ctx=getAudio();
-    const osc=ctx.createOscillator();
-    const filt=ctx.createBiquadFilter();
-    const gain=ctx.createGain();
-    osc.type='sawtooth';
-    const freq=440*Math.pow(2,(midi-69)/12);
-    osc.frequency.value=freq;
-    filt.type='lowpass';
-    filt.frequency.value=accent?2200:1200;
-    filt.Q.value=8;
-    if(slide){filt.frequency.setTargetAtTime(800,ctx.currentTime,dur/1000*0.5);}
-    else{filt.frequency.setTargetAtTime(300,ctx.currentTime,dur/1000*0.3);}
-    gain.gain.value=accent?0.4:0.25;
-    gain.gain.setTargetAtTime(0,ctx.currentTime+dur/1000*0.8,0.05);
-    osc.connect(filt);filt.connect(gain);gain.connect(ctx.destination);
-    osc.start();osc.stop(ctx.currentTime+dur/1000*1.2);
+    const ctx = getAudio();
+    const now = ctx.currentTime;
+    const durSec = dur / 1000;
+
+    if(slide && previewVoice){
+      // SLIDE: glide frequency of the existing oscillator to new pitch
+      const newFreq = 440 * Math.pow(2,(midi-69)/12);
+      previewVoice.osc.frequency.cancelScheduledValues(now);
+      previewVoice.osc.frequency.setValueAtTime(previewVoice.osc.frequency.value, now);
+      previewVoice.osc.frequency.linearRampToValueAtTime(newFreq, now + durSec * 0.12);
+      // Keep filter open for slide duration, then close
+      previewVoice.filt.frequency.cancelScheduledValues(now);
+      previewVoice.filt.frequency.setValueAtTime(accent ? 2800 : 1400, now);
+      previewVoice.filt.frequency.linearRampToValueAtTime(400, now + durSec * 0.9);
+      // Extend note stop
+      previewVoice.stopAt = now + durSec * 1.05;
+      previewVoice.osc.stop(previewVoice.stopAt + 0.05);
+      return;
+    }
+
+    // Stop previous non-slide voice immediately (staccato)
+    if(previewVoice){
+      try{
+        previewVoice.gain.gain.cancelScheduledValues(now);
+        previewVoice.gain.gain.setTargetAtTime(0, now, 0.01);
+        previewVoice.osc.stop(now + 0.05);
+      }catch(e){}
+      previewVoice = null;
+    }
+
+    const osc  = ctx.createOscillator();
+    const filt = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+
+    osc.type = 'sawtooth';
+    const freq = 440 * Math.pow(2,(midi-69)/12);
+    osc.frequency.value = freq;
+
+    filt.type = 'lowpass';
+    filt.Q.value = accent ? 14 : 8;
+
+    // Accent: filter sweeps UP fast then decays (true 303 behavior)
+    // Normal: filter starts mid and decays
+    if(accent){
+      filt.frequency.setValueAtTime(200, now);
+      filt.frequency.linearRampToValueAtTime(3500, now + 0.015);
+      filt.frequency.setTargetAtTime(400, now + 0.015, durSec * 0.25);
+    } else {
+      filt.frequency.setValueAtTime(1200, now);
+      filt.frequency.setTargetAtTime(280, now, durSec * 0.35);
+    }
+
+    gain.gain.setValueAtTime(accent ? 0.45 : 0.28, now);
+    // Note off: at 90% of step duration (staccato), unless slide (handled above)
+    const noteOffTime = now + durSec * 0.88;
+    gain.gain.setTargetAtTime(0, noteOffTime, 0.02);
+
+    osc.connect(filt); filt.connect(gain); gain.connect(ctx.destination);
+    osc.start(now);
+    const stopAt = noteOffTime + 0.12;
+    osc.stop(stopAt);
+    previewVoice = { osc, filt, gain, stopAt };
+    osc.onended = () => { if(previewVoice && previewVoice.osc === osc) previewVoice = null; };
   }catch(e){}
 }
 
@@ -326,13 +378,47 @@ function nextIndex(cur,len){
 function playStep(idx){
   const p=state.pattern;
   const s=p.steps[idx];
-  if(!s||s.gate!=='on')return;
-  const midi=(BASE_OCTAVE+1+s.octave)*12+s.pitch;
-  const vel=s.accent?110:80;
   const dur=stepIntervalMs();
-  sendNoteOn(midi,vel);
-  if(!state.outId) triggerNote(midi,s.slide?dur*1.6:dur*0.85,s.accent,s.slide);
-  setTimeout(()=>sendNoteOff(midi),dur*0.9);
+
+  // MIDI NoteOff for previous note
+  // Slide = legato: overlap prev note with new one (10ms) — true 303 slide
+  // No slide = staccato: stop prev note before new NoteOn
+  if(state._lastMidiNote !== undefined){
+    const prev = state._lastMidiNote;
+    if(s && s.gate==='on' && s.slide){
+      // Legato overlap: stop prev 10ms after new NoteOn
+      setTimeout(()=>sendNoteOff(prev), 10);
+    } else {
+      sendNoteOff(prev);
+    }
+    state._lastMidiNote = undefined;
+  }
+
+  if(!s || s.gate!=='on'){
+    state._lastMidiSlide = false;
+    return;
+  }
+
+  const midi = (BASE_OCTAVE+1+s.octave)*12 + s.pitch;
+  const vel  = s.accent ? 110 : 80;
+
+  sendNoteOn(midi, vel);
+  state._lastMidiNote  = midi;
+  state._lastMidiSlide = s.slide;
+
+  // Audio preview (only when no MIDI output selected)
+  if(!state.outId) triggerNote(midi, dur, s.accent, s.slide);
+
+  // Schedule NoteOff only for non-slide notes (slide notes are stopped by next step)
+  if(!s.slide){
+    const snapMidi = midi;
+    setTimeout(()=>{
+      if(state._lastMidiNote === snapMidi){
+        sendNoteOff(snapMidi);
+        state._lastMidiNote = undefined;
+      }
+    }, dur * 0.88);
+  }
 }
 function startSeq(){
   if(state.isPlaying)return;
@@ -357,6 +443,21 @@ function stopSeq(){
   state.intervalId=null;
   state.isPlaying=false;
   state.currentStep=-1;
+  // Send NoteOff for any hanging MIDI note
+  if(state._lastMidiNote !== undefined){
+    sendNoteOff(state._lastMidiNote);
+    state._lastMidiNote=undefined;
+  }
+  state._lastMidiSlide=false;
+  // Kill audio preview voice
+  if(previewVoice){
+    try{
+      const ctx=getAudio();
+      previewVoice.gain.gain.setTargetAtTime(0,ctx.currentTime,0.01);
+      previewVoice.osc.stop(ctx.currentTime+0.05);
+    }catch(e){}
+    previewVoice=null;
+  }
   renderStepHighlight();
   document.getElementById('play-btn').textContent='▶';
 }
