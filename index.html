@@ -432,179 +432,194 @@ function loadPattern(){
     else flash('Slot is empty');
   }catch(e){flash('Load failed');}
 }
-// ── TD-3 SysEx helpers ────────────────────────────────────────────────────────
-// Protocol from https://303patterns.com/td3-midi.html (Brad Isbell, AudioPump)
-// SysEx header common to all TD-3 messages: F0 00 20 32 00 01 0A ... F7
+// ── TD-3 SysEx — ROUNDTRIP ARCHITECTURE ──────────────────────────────────────
+//
+// Core principle: never reconstruct SysEx from scratch.
+// The TD-3 sends back a 123-byte SysEx on fetch. We cache that exact buffer.
+// On save, we send back the SAME buffer, only patching the bytes that the user
+// changed in the UI (pitches, gate, accent, slide, length).
+//
+// Byte layout of a 123-byte pattern SysEx (F0 ... F7):
+//   [0]      F0
+//   [1-6]    00 20 32 00 01 0A   (Behringer manufacturer + TD-3 device)
+//   [7]      0x78                (command: pattern data)
+//   [8]      grp  0-3
+//   [9]      pat  1-16  (A: 1-8, B: 9-16)
+//   [10-11]  00 00
+//   [12-43]  pitch × 16  (2 bytes each: [msb, lsb])
+//   [44-75]  accent × 16 (2 bytes each: [00, 0|1])
+//   [76-107] slide × 16  (2 bytes each: [00, 0|1])
+//   [108-109] triplet
+//   [110-111] step count
+//   [112-113] unknown
+//   [114-117] tie
+//   [118-121] rest bitmask (4 bytes)
+//   [122]    F7
+//
+// Pitch bytes [msb, lsb]:
+//   msb: 0x00=oct-down, 0x01=normal, 0x02=oct-up
+//   lsb: semitone 0x00(C)..0x0B(B), rest filler = 0x08
+//
+// Rest bitmask layout: byte0=xxxx7654 byte1=xxxx3210 byte2=xxxxFEDC byte3=xxxxBA98
+//   bit=1 → step is resting. bit=0 → step is active (note on).
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
 const TD3_HDR = [0x00, 0x20, 0x32, 0x00, 0x01, 0x0A];
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TD-3 SysEx — faithful to https://303patterns.com/td3-midi.html
-//
-// Key facts from spec:
-//   • grp (byte 0x08) = 0-3  (raw single byte, NOT nibble-split)
-//   • pat (byte 0x09) = 1-8 for section A, 9-16 for section B (raw single byte)
-//   • Pitches 0x0C-0x2B: MSB=0x00(oct-)/0x01(normal)/0x02(oct+), LSB=semitone 0x00-0x0F
-//   • Rest pitches (inactive steps) canonically = MSB 0x01, LSB 0x08  (= C, mid octave)
-//   • Accent 0x2C-0x4B: MSB=0x00, LSB=0x00/0x01
-//   • Slide  0x4C-0x6B: MSB=0x00, LSB=0x00/0x01
-//   • Triplet 0x6C-0x6D: MSB=0x00, LSB=0x00/0x01
-//   • Step count 0x6E-0x6F: MSB=0x00 or 0x01, LSB=0x01-0x0F  (NOT nibble-split of len-1)
-//     → actual length = (MSB<<4|LSB) when spec says "0x00 01" means 1 step,
-//       BUT looking at spec example header byte "01 00" in response header after grp/pat
-//       means those two are always 0x00 0x00; step count is literal: 0x00,len for 1-15 steps
-//       and 0x01,0x00 for 16 steps.
-//   • Rest bitmask 0x76-0x79: layout "xxxx7654 xxxx3210 xxxxFEDC xxxxBA98"
-//     bit=1 means RESTING. To un-rest step 0 (first): clear bit3 of byte 0x77 (index 1).
-// ─────────────────────────────────────────────────────────────────────────────
+// Cached raw SysEx from the last FROM-TD3. Null = never fetched.
+// This is the ground truth for TO-TD3.
+// Shape: Uint8Array | null
+let rawSysexCache = null;
 
 // UI state → [grp, pat] bytes for SysEx
 function td3SlotBytes() {
-  const grp = (state.group - 1) & 0x03;                      // Group 1-4 → 0-3
-  const bankNum = parseInt(state.bank, 10);                   // Bank '1'-'8' → 1-8
-  const pat = state.section === 'A' ? bankNum : bankNum + 8; // A=1-8, B=9-16
+  const grp    = (state.group - 1) & 0x03;
+  const bankNum = parseInt(state.bank, 10);
+  const pat    = state.section === 'A' ? bankNum : bankNum + 8;
   return [grp, pat];
 }
 
-// Encode rest bitmask for 16 steps.
-// Layout: byte0 = xxxx7654, byte1 = xxxx3210, byte2 = xxxxFEDC, byte3 = xxxxBA98
-// bit=1 → resting. We start all-resting (0x0F each) and clear bits for active steps.
-// Step N lives at: byte = [1,0,3,2][Math.floor(N/4)], bit = 3-(N%4)
-function encodeRestMask(steps) {
-  // byte index for each group of 4 steps:
-  // steps 0-3  → byte index 1 (layout slot "3210")
-  // steps 4-7  → byte index 0 (layout slot "7654")
-  // steps 8-11 → byte index 3 (layout slot "BA98")
-  // steps 12-15→ byte index 2 (layout slot "FEDC")
-  const byteForGroup = [1, 0, 3, 2];
-  const mask = [0x0F, 0x0F, 0x0F, 0x0F];
+// ── REST BITMASK helpers ──────────────────────────────────────────────────────
+// byte0=xxxx7654  byte1=xxxx3210  byte2=xxxxFEDC  byte3=xxxxBA98
+// step i → group = floor(i/4), bit = 3-(i%4)
+// group→byteIndex: [0→1, 1→0, 2→3, 3→2]
+const REST_BYTE_FOR_GROUP = [1, 0, 3, 2];
+
+function restBitIsSet(maskBytes, i) {
+  // returns true if step i is RESTING
+  const byteIdx = REST_BYTE_FOR_GROUP[Math.floor(i / 4)];
+  const bitPos  = 3 - (i % 4);
+  return !!((maskBytes[byteIdx] >> bitPos) & 1);
+}
+
+function buildRestMask(steps) {
+  const mask = [0x0F, 0x0F, 0x0F, 0x0F]; // all resting by default
   for (let i = 0; i < 16; i++) {
     if (steps[i].gate === 'on') {
-      const byteIdx = byteForGroup[Math.floor(i / 4)];
-      const bitPos  = 3 - (i % 4); // step 0→bit3, step 1→bit2, step 2→bit1, step 3→bit0
-      mask[byteIdx] &= ~(1 << bitPos);
+      const byteIdx = REST_BYTE_FOR_GROUP[Math.floor(i / 4)];
+      const bitPos  = 3 - (i % 4);
+      mask[byteIdx] &= ~(1 << bitPos); // clear bit → active
     }
   }
   return mask;
 }
 
-// Decode rest bitmask byte array (4 bytes at offset) for step i
-function decodeRestBit(data, offset, i) {
-  const byteForGroup = [1, 0, 3, 2];
-  const byteIdx = byteForGroup[Math.floor(i / 4)];
-  const bitPos  = 3 - (i % 4);
-  return (data[offset + byteIdx] >> bitPos) & 1; // 1 = resting
-}
-
-// App pattern → TD-3 SysEx put-pattern message (0x78)
-// This is the exact same format the TD-3 sends back on a fetch — just replay it.
-function patternToSysex() {
-  const p = state.pattern;
-  const [grp, pat] = td3SlotBytes();
-
-  // F0 <hdr> 78 <grp> <pat> 00 00
-  const msg = [0xF0, ...TD3_HDR, 0x78, grp, pat, 0x00, 0x00];
-
-  // 0x0C-0x2B  Pitches: 16 × 2 bytes
-  // MSB: 0x00=oct- 0x01=normal 0x02=oct+
-  // LSB: semitone 0x00-0x0B  (rest = 0x01, 0x08)
-  for (let i = 0; i < 16; i++) {
-    const s = p.steps[i];
-    if (s.gate === 'on') {
-      const msb = s.octave < 0 ? 0x00 : s.octave > 0 ? 0x02 : 0x01;
-      msg.push(msb, s.pitch & 0x0F);
-    } else {
-      msg.push(0x01, 0x08); // canonical rest = C mid-octave
-    }
-  }
-
-  // 0x2C-0x4B  Accent: 16 × 2 bytes (MSB always 0x00)
-  for (let i = 0; i < 16; i++) {
-    msg.push(0x00, (p.steps[i].gate === 'on' && p.steps[i].accent) ? 0x01 : 0x00);
-  }
-
-  // 0x4C-0x6B  Slide: 16 × 2 bytes (MSB always 0x00)
-  for (let i = 0; i < 16; i++) {
-    msg.push(0x00, (p.steps[i].gate === 'on' && p.steps[i].slide) ? 0x01 : 0x00);
-  }
-
-  // 0x6C-0x6D  Triplet: off
-  msg.push(0x00, 0x00);
-
-  // 0x6E-0x6F  Step count: MSB=0x01 if 16 steps else 0x00, LSB=len%16 (0x00 for 16)
-  const len = Math.max(1, Math.min(16, p.length));
-  msg.push(len === 16 ? 0x01 : 0x00, len === 16 ? 0x00 : len);
-
-  // 0x70-0x71  Unknown (always 0x00 0x00)
-  msg.push(0x00, 0x00);
-
-  // 0x72-0x75  Tie: all zeros
-  msg.push(0x00, 0x00, 0x00, 0x00);
-
-  // 0x76-0x79  Rest bitmask
-  msg.push(...encodeRestMask(p.steps));
-
-  msg.push(0xF7);
-  return msg;
-}
-
-// TD-3 SysEx response (0x78) → app pattern state
-// Byte layout (absolute indices in received SysEx array):
-//   0     = F0
-//   1-6   = 00 20 32 00 01 0A
-//   7     = 0x78
-//   8     = grp (0-3)
-//   9     = pat (1-16)
-//   10-11 = 00 00
-//   12-43 = pitches (16 × 2 bytes)
-//   44-75 = accent  (16 × 2 bytes)
-//   76-107= slide   (16 × 2 bytes)
-//   108-109= triplet
-//   110-111= step count
-//   112-113= unknown
-//   114-117= tie
-//   118-121= rest bitmask
-//   122   = F7
+// ── PARSE SysEx → state.pattern ───────────────────────────────────────────────
+// PITCH ENCODING per spec 303patterns.com:
+//   Values are nibble-split: byte[n]=upper nibble, byte[n+1]=lower nibble
+//   full = (byte[n]<<4) | byte[n+1]
+//   TD-3 pitch is MIDI-note-number style but ONE OCTAVE LOWER than MIDI standard.
+//   Canonical rest = 0x18 → [0x01, 0x08]. TD-3 range: ~0x00..0x2F (3 octaves)
+//   octave relative to "normal" (octave index 2, 0x18-0x23):
+//     floor(full/12) < 2  → octave -1
+//     floor(full/12) == 2 → octave  0
+//     floor(full/12) > 2  → octave +1
 function sysexToPattern(data) {
+  const maskOffset = 118;
   const steps = [];
+
   for (let i = 0; i < 16; i++) {
-    // Pitch
-    const msb      = data[12 + i * 2];
-    const lsb      = data[13 + i * 2];
-    const semitone = lsb & 0x0F;
-    const octave   = msb === 0x00 ? -1 : msb === 0x02 ? 1 : 0;
+    // Nibble-split pitch
+    const msN = data[12 + i * 2] & 0x0F;
+    const lsN = data[13 + i * 2] & 0x0F;
+    const noteVal  = ((msN << 4) | lsN) & 0x7F; // mask top bit anomaly
+    const octIdx   = Math.floor(noteVal / 12);
+    const semitone = noteVal % 12;
+    const octave   = octIdx < 2 ? -1 : octIdx > 2 ? 1 : 0;
 
-    // Accent
-    const accent = data[45 + i * 2] === 0x01; // LSB of accent pair
+    // Accent / slide: nibble-split booleans, MSB nibble always 0
+    const accent = data[45 + i * 2] === 0x01 || data[44 + i * 2] === 0x01;
+    const slide  = data[77 + i * 2] === 0x01 || data[76 + i * 2] === 0x01;
 
-    // Slide
-    const slide = data[77 + i * 2] === 0x01;  // LSB of slide pair
-
-    // Rest (1 = resting, 0 = active)
-    const isRest = decodeRestBit(data, 118, i);
+    const isRest = restBitIsSet(data.slice(maskOffset, maskOffset + 4), i);
 
     steps.push({ pitch: semitone, gate: isRest ? 'rest' : 'on', octave, accent, slide });
   }
 
-  // Step count
-  const scMsb = data[110];
-  const scLsb = data[111];
-  const length = scMsb === 0x01 ? 16 : scLsb;
+  // Step count: nibble-split. 0x01 0x00 = 0x10 = 16; 0x00 0x08 = 0x08 = 8; etc.
+  const scNibble = ((data[110] & 0x0F) << 4) | (data[111] & 0x0F);
+  const length   = scNibble === 0x10 ? 16 : Math.max(1, Math.min(15, scNibble));
 
   state.pattern.steps  = steps;
-  state.pattern.length = Math.max(1, Math.min(16, length));
+  state.pattern.length = length;
+}
+
+// ── PATCH cached SysEx with current state.pattern ────────────────────────────
+// Returns a new Uint8Array ready to send — identical to what we received,
+// except for the fields the user may have edited.
+function buildSysexFromState() {
+  const p = state.pattern;
+
+  // If we have a cached raw buffer, start from that so unknown bytes are preserved.
+  // Otherwise build a minimal valid frame (all zeros for unknowns).
+  let buf;
+  if (rawSysexCache && rawSysexCache.length === 123) {
+    buf = new Uint8Array(rawSysexCache); // copy, don't mutate cache
+  } else {
+    buf = new Uint8Array(123);
+    buf[0]  = 0xF0;
+    TD3_HDR.forEach((b, j) => buf[1 + j] = b);
+    buf[7]  = 0x78;
+    const [grp, pat] = td3SlotBytes();
+    buf[8]  = grp;
+    buf[9]  = pat;
+    buf[122] = 0xF7;
+  }
+
+  // Always update grp/pat to match current UI selection
+  const [grp, pat] = td3SlotBytes();
+  buf[8] = grp;
+  buf[9] = pat;
+
+  // Pitches + accent + slide
+  // TD-3 "normal" octave = MIDI range 0x18-0x23 (octave index 2 in 12-note groups)
+  // octave -1 → base 0x0C (index 1), normal → 0x18 (index 2), +1 → 0x24 (index 3)
+  const OCT_BASE = { '-1': 0x0C, '0': 0x18, '1': 0x24 };
+  for (let i = 0; i < 16; i++) {
+    const s = p.steps[i];
+    if (s.gate === 'on') {
+      const base    = OCT_BASE[String(s.octave)] ?? 0x18;
+      const noteVal = base + (s.pitch & 0x0F);
+      buf[12 + i * 2] = (noteVal >> 4) & 0x0F;  // upper nibble
+      buf[13 + i * 2] =  noteVal       & 0x0F;  // lower nibble
+    } else {
+      // rest: use canonical rest bytes [0x01, 0x08] = 0x18 if no cache
+      if (!rawSysexCache) {
+        buf[12 + i * 2] = 0x01;
+        buf[13 + i * 2] = 0x08;
+      }
+      // if cache exists, pitch bytes already copied from cache — leave them
+    }
+    buf[44 + i * 2] = 0x00;
+    buf[45 + i * 2] = (s.gate === 'on' && s.accent) ? 0x01 : 0x00;
+    buf[76 + i * 2] = 0x00;
+    buf[77 + i * 2] = (s.gate === 'on' && s.slide)  ? 0x01 : 0x00;
+  }
+
+  // Step count: nibble-split. 16 → 0x10 → [0x01, 0x00]; 8 → 0x08 → [0x00, 0x08]
+  const len     = Math.max(1, Math.min(16, p.length));
+  const lenByte = len === 16 ? 0x10 : len;
+  buf[110] = (lenByte >> 4) & 0x0F;
+  buf[111] =  lenByte       & 0x0F;
+
+  // Rest bitmask
+  const mask = buildRestMask(p.steps);
+  buf[118] = mask[0];
+  buf[119] = mask[1];
+  buf[120] = mask[2];
+  buf[121] = mask[3];
+
+  return buf;
 }
 
 function sendToTD3() {
   if (!state.outId) { flash('TD-3 not connected'); return; }
   const out = state.midiAccess && state.midiAccess.outputs.get(state.outId);
   if (!out) { flash('TD-3 output not found'); return; }
+  if (!state.midiAccess.sysexEnabled) { flash('Enable SysEx in MIDI permissions'); return; }
   try {
-    const sysex = patternToSysex();
-    // Web MIDI requires sysex:true in requestMIDIAccess — re-request if needed
-    if (!state.midiAccess.sysexEnabled) {
-      flash('Enable SysEx in MIDI permissions');
-      return;
-    }
+    const sysex = buildSysexFromState();
     out.send(sysex);
     debugLog(`→ TX PUT  G${state.group}·B${state.bank}·${state.section}`, sysex);
     flash(`→ TD-3 G${state.group}·B${state.bank}·${state.section} saved`);
@@ -648,6 +663,7 @@ function fetchFromTD3() {
     inp.onmidimessage = null;
     debugLog(`← RX  grp=${d[8]} pat=${d[9]}  len=${d.length}`, d);
     try {
+      rawSysexCache = new Uint8Array(d); // cache the exact raw bytes for roundtrip
       sysexToPattern(d);
       renderSeq();
       renderTransport();
@@ -750,6 +766,7 @@ function renderPatternsModal(){
 document.getElementById('modal-patterns').addEventListener('click',()=>{});
 function updateSlotText(){document.getElementById('slot-text').textContent=`G${state.group} · B${state.bank} · ${state.section}`;}
 function loadPatternSilent(){
+  rawSysexCache=null; // slot changed — invalidate raw buffer
   try{
     const raw=localStorage.getItem(slotKey(state.group,state.bank,state.section));
     if(raw){state.pattern=JSON.parse(raw);}
