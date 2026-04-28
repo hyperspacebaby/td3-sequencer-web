@@ -489,33 +489,37 @@ function pitchToNibbles(semitone, octave) {
 }
 
 function nibblesToPitch(ms, ls) {
-  // ricostruisce semitone e octave da due nibble TD-3
-  const val      = ((ms & 0x0F) << 4) | (ls & 0x0F);
+  // Spec: "Pitches entered with the high 'C' on the TD-3 keyboard have their
+  // top bit set high. Therefore, you'll want to bitwise AND against 0x7F."
+  // Combine nibbles, mask off any high bit artifact
+  const val      = (((ms & 0x0F) << 4) | (ls & 0x0F)) & 0x7F;
   const semitone = val % 12;
-  const octIdx   = Math.floor(val / 12); // 1=bassa, 2=normale, 3=alta
+  const octIdx   = Math.floor(val / 12); // 1=bassa(0x0C), 2=normale(0x18), 3=alta(0x24)
   const octave   = octIdx <= 1 ? -1 : octIdx >= 3 ? 1 : 0;
   return { semitone, octave };
 }
 
 // ── Rest mask helpers ─────────────────────────────────────────────────────────
-// step 0-3  → byte[1] bit 3-0
-// step 4-7  → byte[0] bit 3-0
-// step 8-11 → byte[3] bit 3-0
-// step 12-15→ byte[2] bit 3-0
-const REST_BYTE = [1, 0, 3, 2]; // byte index per ogni gruppo di 4 step
+// Spec layout (303patterns.com):  xxxx7654  xxxx3210  xxxxFEDC  xxxxBA98
+//   byte[0] (offset 118) = steps 4-7   (bit3=step7, bit2=step6, bit1=step5, bit0=step4)
+//   byte[1] (offset 119) = steps 0-3   (bit3=step3, bit2=step2, bit1=step1, bit0=step0)
+//   byte[2] (offset 120) = steps 12-15 (bit3=step15, ... bit0=step12)
+//   byte[3] (offset 121) = steps 8-11  (bit3=step11, ... bit0=step8)
+// bit = step % 4  (LSB = lower step index, confirmed by spec notation)
+const REST_BYTE = [1, 0, 3, 2]; // byte index for each group of 4 steps
 
 function restIsSet(mask4, step) {
   const b = REST_BYTE[Math.floor(step / 4)];
-  const bit = 3 - (step % 4);
+  const bit = step % 4; // LSB = lower step index
   return !!((mask4[b] >> bit) & 1);
 }
 
 function buildRestMask(steps) {
-  const m = [0x0F, 0x0F, 0x0F, 0x0F];
+  const m = [0x0F, 0x0F, 0x0F, 0x0F]; // all rests by default
   for (let i = 0; i < 16; i++) {
     if (steps[i] && steps[i].gate === 'on') {
       const b   = REST_BYTE[Math.floor(i / 4)];
-      const bit = 3 - (i % 4);
+      const bit = i % 4; // LSB = lower step index
       m[b] &= ~(1 << bit);
     }
   }
@@ -542,9 +546,11 @@ function sysexToPattern(data) {
     steps.push({ pitch: semitone, gate: isRest ? 'rest' : 'on', octave, accent, slide });
   }
 
-  // step count: nibble-split, 0x10 = 16 step
-  const sc = ((data[110] & 0x0F) << 4) | (data[111] & 0x0F);
-  const length = sc === 0x10 ? 16 : Math.max(1, Math.min(15, sc || 16));
+  // Step count: spec says byte[0x6E]=MSB(0x00 or 0x01), byte[0x6F]=LSB(0x00-0x0F)
+  // 16 steps = 0x01 0x00, 1 step = 0x00 0x01, 8 steps = 0x00 0x08
+  const scMsb = data[110] & 0x0F;
+  const scLsb = data[111] & 0x0F;
+  const length = (scMsb === 1 && scLsb === 0) ? 16 : Math.max(1, Math.min(15, scLsb || 16));
 
   state.pattern.steps  = steps;
   state.pattern.length = length;
@@ -607,10 +613,10 @@ function buildSysexFromState() {
   // Triplet [108..109] = 00 00
   buf[108] = 0x00; buf[109] = 0x00;
 
-  // Step count nibble-split
+  // Step count: spec says MSB=0x01 LSB=0x00 for 16, else MSB=0x00 LSB=count
   const len = Math.max(1, Math.min(16, p.length));
-  if (len === 16) { buf[110] = 0x01; buf[111] = 0x00; }
-  else            { buf[110] = 0x00; buf[111] = len & 0x0F; }
+  buf[110] = (len === 16) ? 0x01 : 0x00;
+  buf[111] = (len === 16) ? 0x00 : (len & 0x0F);
 
   // Unknown [112..113] = 00 00
   buf[112] = 0x00; buf[113] = 0x00;
@@ -676,10 +682,13 @@ function fetchFromTD3() {
     if (d[7] !== 0x78) return;
     clearTimeout(timeoutId);
     inp.onmidimessage = null;
-    debugLog(`← RX  grp=${d[8]} pat=${d[9]}  len=${d.length}`, d);
+    const restBytes = d.length >= 122 ? `rest=[${d[118].toString(16).padStart(2,'0')} ${d[119].toString(16).padStart(2,'0')} ${d[120].toString(16).padStart(2,'0')} ${d[121].toString(16).padStart(2,'0')}]` : '';
+    debugLog(`← RX  grp=${d[8]} pat=${d[9]}  len=${d.length}  ${restBytes}`, d);
     try {
       rawSysexCache = new Uint8Array(d);
       sysexToPattern(d);
+      // Auto-save to localStorage so the pattern persists
+      try { localStorage.setItem(slotKey(state.group, state.bank, state.section), JSON.stringify(state.pattern)); } catch(e) {}
       renderSeq();
       renderTransport();
       flash(`← TD-3 caricato (${d.length} byte)`);
