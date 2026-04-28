@@ -427,136 +427,158 @@ function loadPattern(){
 // SysEx header common to all TD-3 messages: F0 00 20 32 00 01 0A ... F7
 const TD3_HDR = [0x00, 0x20, 0x32, 0x00, 0x01, 0x0A];
 
-// Group 1-4 → 0-3 ; Bank '1'-'8' + Section 'A'/'B' → pattern 1-8 (A) or 9-16 (B)
-// Per 303patterns.com/td3-midi.html:
-//   byte 0x08 = group (0-3)
-//   byte 0x09 = pattern: A section → bank number as-is (1-8), B section → bank + 8 (9-16)
+// ─────────────────────────────────────────────────────────────────────────────
+// TD-3 SysEx — faithful to https://303patterns.com/td3-midi.html
+//
+// Key facts from spec:
+//   • grp (byte 0x08) = 0-3  (raw single byte, NOT nibble-split)
+//   • pat (byte 0x09) = 1-8 for section A, 9-16 for section B (raw single byte)
+//   • Pitches 0x0C-0x2B: MSB=0x00(oct-)/0x01(normal)/0x02(oct+), LSB=semitone 0x00-0x0F
+//   • Rest pitches (inactive steps) canonically = MSB 0x01, LSB 0x08  (= C, mid octave)
+//   • Accent 0x2C-0x4B: MSB=0x00, LSB=0x00/0x01
+//   • Slide  0x4C-0x6B: MSB=0x00, LSB=0x00/0x01
+//   • Triplet 0x6C-0x6D: MSB=0x00, LSB=0x00/0x01
+//   • Step count 0x6E-0x6F: MSB=0x00 or 0x01, LSB=0x01-0x0F  (NOT nibble-split of len-1)
+//     → actual length = (MSB<<4|LSB) when spec says "0x00 01" means 1 step,
+//       BUT looking at spec example header byte "01 00" in response header after grp/pat
+//       means those two are always 0x00 0x00; step count is literal: 0x00,len for 1-15 steps
+//       and 0x01,0x00 for 16 steps.
+//   • Rest bitmask 0x76-0x79: layout "xxxx7654 xxxx3210 xxxxFEDC xxxxBA98"
+//     bit=1 means RESTING. To un-rest step 0 (first): clear bit3 of byte 0x77 (index 1).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// UI state → [grp, pat] bytes for SysEx
 function td3SlotBytes() {
-  const grp = (state.group - 1) & 0x03;                       // 0-3
-  const bankNum = parseInt(state.bank, 10);                    // 1-8
-  const pat = state.section === 'A' ? bankNum : bankNum + 8;  // 1-8 (A) or 9-16 (B)
+  const grp = (state.group - 1) & 0x03;                      // Group 1-4 → 0-3
+  const bankNum = parseInt(state.bank, 10);                   // Bank '1'-'8' → 1-8
+  const pat = state.section === 'A' ? bankNum : bankNum + 8; // A=1-8, B=9-16
   return [grp, pat];
 }
 
-// Convert app pattern → TD-3 SysEx 0x78 payload
-// Protocol per 303patterns.com: grp and pat are nibble-split (8-bit → 2 bytes)
-function patternToSysex() {
-  const p  = state.pattern;
-  const [grp, pat] = td3SlotBytes();
-  // grp: 0-3, pat: 1-16 — each split as (val>>4)&0x0F, val&0x0F
-  const msg = [0xF0, ...TD3_HDR, 0x78,
-    (grp >> 4) & 0x0F, grp & 0x0F,
-    (pat >> 4) & 0x0F, pat & 0x0F
-  ];
+// Encode rest bitmask for 16 steps.
+// Layout: byte0 = xxxx7654, byte1 = xxxx3210, byte2 = xxxxFEDC, byte3 = xxxxBA98
+// bit=1 → resting. We start all-resting (0x0F each) and clear bits for active steps.
+// Step N lives at: byte = [1,0,3,2][Math.floor(N/4)], bit = 3-(N%4)
+function encodeRestMask(steps) {
+  // byte index for each group of 4 steps:
+  // steps 0-3  → byte index 1 (layout slot "3210")
+  // steps 4-7  → byte index 0 (layout slot "7654")
+  // steps 8-11 → byte index 3 (layout slot "BA98")
+  // steps 12-15→ byte index 2 (layout slot "FEDC")
+  const byteForGroup = [1, 0, 3, 2];
+  const mask = [0x0F, 0x0F, 0x0F, 0x0F];
+  for (let i = 0; i < 16; i++) {
+    if (steps[i].gate === 'on') {
+      const byteIdx = byteForGroup[Math.floor(i / 4)];
+      const bitPos  = 3 - (i % 4); // step 0→bit3, step 1→bit2, step 2→bit1, step 3→bit0
+      mask[byteIdx] &= ~(1 << bitPos);
+    }
+  }
+  return mask;
+}
 
-  // Pitches: 16 steps × 2 bytes (nibble-split 8-bit value)
-  // Pitch 8-bit = (octaveNibble << 4) | semitone
-  //   octaveNibble: 0=oct-, 1=normal, 2=oct+
-  // rest = 0x18 → split as 0x01, 0x08
+// Decode rest bitmask byte array (4 bytes at offset) for step i
+function decodeRestBit(data, offset, i) {
+  const byteForGroup = [1, 0, 3, 2];
+  const byteIdx = byteForGroup[Math.floor(i / 4)];
+  const bitPos  = 3 - (i % 4);
+  return (data[offset + byteIdx] >> bitPos) & 1; // 1 = resting
+}
+
+// App pattern → TD-3 SysEx put-pattern message (0x78)
+// This is the exact same format the TD-3 sends back on a fetch — just replay it.
+function patternToSysex() {
+  const p = state.pattern;
+  const [grp, pat] = td3SlotBytes();
+
+  // F0 <hdr> 78 <grp> <pat> 00 00
+  const msg = [0xF0, ...TD3_HDR, 0x78, grp, pat, 0x00, 0x00];
+
+  // 0x0C-0x2B  Pitches: 16 × 2 bytes
+  // MSB: 0x00=oct- 0x01=normal 0x02=oct+
+  // LSB: semitone 0x00-0x0B  (rest = 0x01, 0x08)
   for (let i = 0; i < 16; i++) {
     const s = p.steps[i];
     if (s.gate === 'on') {
-      const octNibble = s.octave < 0 ? 0x0 : s.octave > 0 ? 0x2 : 0x1;
-      const semitone  = s.pitch & 0x0F;
-      const val       = (octNibble << 4) | semitone;
-      msg.push((val >> 4) & 0x0F, val & 0x0F);
+      const msb = s.octave < 0 ? 0x00 : s.octave > 0 ? 0x02 : 0x01;
+      msg.push(msb, s.pitch & 0x0F);
     } else {
-      msg.push(0x01, 0x08); // rest = 0x18
+      msg.push(0x01, 0x08); // canonical rest = C mid-octave
     }
   }
 
-  // Accent: 16 steps × 2 bytes
+  // 0x2C-0x4B  Accent: 16 × 2 bytes (MSB always 0x00)
   for (let i = 0; i < 16; i++) {
-    const s = p.steps[i];
-    msg.push(0x00, (s.gate === 'on' && s.accent) ? 0x01 : 0x00);
+    msg.push(0x00, (p.steps[i].gate === 'on' && p.steps[i].accent) ? 0x01 : 0x00);
   }
 
-  // Slide: 16 steps × 2 bytes
+  // 0x4C-0x6B  Slide: 16 × 2 bytes (MSB always 0x00)
   for (let i = 0; i < 16; i++) {
-    const s = p.steps[i];
-    msg.push(0x00, (s.gate === 'on' && s.slide) ? 0x01 : 0x00);
+    msg.push(0x00, (p.steps[i].gate === 'on' && p.steps[i].slide) ? 0x01 : 0x00);
   }
 
-  // Triplet mode (0x6C-0x6D): off
+  // 0x6C-0x6D  Triplet: off
   msg.push(0x00, 0x00);
 
-  // Step count (0x6E-0x6F): nibble-split of (length - 1), range 0x00-0x0F
-  const lenVal = Math.max(0, Math.min(15, p.length - 1));
-  msg.push((lenVal >> 4) & 0x0F, lenVal & 0x0F);
+  // 0x6E-0x6F  Step count: MSB=0x01 if 16 steps else 0x00, LSB=len%16 (0x00 for 16)
+  const len = Math.max(1, Math.min(16, p.length));
+  msg.push(len === 16 ? 0x01 : 0x00, len === 16 ? 0x00 : len);
 
-  // Unknown (0x70-0x71)
+  // 0x70-0x71  Unknown (always 0x00 0x00)
   msg.push(0x00, 0x00);
 
-  // Tie (0x72-0x75): all zeros (no tie info in our model)
+  // 0x72-0x75  Tie: all zeros
   msg.push(0x00, 0x00, 0x00, 0x00);
 
-  // Rest bitmask (0x76-0x79): 4 bytes, lower nibble used
-  // Layout per spec: xxxx7654  xxxx3210  xxxxFEDC  xxxxBA98
-  // byte0→steps4-7, byte1→steps0-3, byte2→steps12-15, byte3→steps8-11
-  // bit=1 means RESTING; start all set, clear for gate='on'
-  const restBits = [0x0F, 0x0F, 0x0F, 0x0F];
-  const nibbleMap = [1, 0, 3, 2]; // group0(steps0-3)→nibble1, group1(steps4-7)→nibble0, etc.
-  for (let i = 0; i < 16; i++) {
-    if (p.steps[i].gate === 'on') {
-      const group     = Math.floor(i / 4);
-      const posInGrp  = i % 4;
-      const nibbleIdx = nibbleMap[group];
-      const bitPos    = 3 - posInGrp;
-      restBits[nibbleIdx] &= ~(1 << bitPos);
-    }
-  }
-  msg.push(...restBits);
+  // 0x76-0x79  Rest bitmask
+  msg.push(...encodeRestMask(p.steps));
+
   msg.push(0xF7);
   return msg;
 }
 
-// Parse TD-3 SysEx 0x78 response → update app state
-// Response structure (byte indices):
-//   0      = F0
-//   1-6    = TD3_HDR (00 20 32 00 01 0A)
-//   7      = 0x78 (cmd)
-//   8-9    = group (nibble-split)
-//   10-11  = pattern (nibble-split)
-//   12-43  = pitches (16 × 2 bytes nibble-split)
-//   44-75  = accent (16 × 2 bytes nibble-split)
-//   76-107 = slide  (16 × 2 bytes nibble-split)
+// TD-3 SysEx response (0x78) → app pattern state
+// Byte layout (absolute indices in received SysEx array):
+//   0     = F0
+//   1-6   = 00 20 32 00 01 0A
+//   7     = 0x78
+//   8     = grp (0-3)
+//   9     = pat (1-16)
+//   10-11 = 00 00
+//   12-43 = pitches (16 × 2 bytes)
+//   44-75 = accent  (16 × 2 bytes)
+//   76-107= slide   (16 × 2 bytes)
 //   108-109= triplet
-//   110-111= step count (nibble-split of length-1)
+//   110-111= step count
 //   112-113= unknown
 //   114-117= tie
-//   118-121= rest bitmask (4 bytes, lower nibble each)
+//   118-121= rest bitmask
+//   122   = F7
 function sysexToPattern(data) {
   const steps = [];
   for (let i = 0; i < 16; i++) {
-    const pBase = 12 + i * 2;
-    const msbNibble = data[pBase]     & 0x0F;
-    const lsbNibble = data[pBase + 1] & 0x0F;
-    const val       = (msbNibble << 4) | lsbNibble; // recombine into 8-bit
-    const semitone  = val & 0x0F;                   // lower nibble = semitone
-    const octNibble = (val >> 4) & 0x0F;            // upper nibble = octave indicator
-    const octave    = octNibble === 0x0 ? -1 : (octNibble === 0x2 ? 1 : 0);
+    // Pitch
+    const msb      = data[12 + i * 2];
+    const lsb      = data[13 + i * 2];
+    const semitone = lsb & 0x0F;
+    const octave   = msb === 0x00 ? -1 : msb === 0x02 ? 1 : 0;
 
-    const aBase  = 44 + i * 2;
-    const accent = (data[aBase + 1] & 0x0F) === 0x01;
-    const sBase  = 76 + i * 2;
-    const slide  = (data[sBase + 1] & 0x0F) === 0x01;
+    // Accent
+    const accent = data[45 + i * 2] === 0x01; // LSB of accent pair
 
-    // Rest bitmask at bytes 118-121
-    // Layout: byte118→steps4-7, byte119→steps0-3, byte120→steps12-15, byte121→steps8-11
-    const nibbleMap = [1, 0, 3, 2]; // group→nibble index (same as encoding)
-    const group     = Math.floor(i / 4);
-    const posInGrp  = i % 4;
-    const nibbleIdx = nibbleMap[group];
-    const bitPos    = 3 - posInGrp;
-    const isRest    = (data[118 + nibbleIdx] >> bitPos) & 1;
+    // Slide
+    const slide = data[77 + i * 2] === 0x01;  // LSB of slide pair
+
+    // Rest (1 = resting, 0 = active)
+    const isRest = decodeRestBit(data, 118, i);
 
     steps.push({ pitch: semitone, gate: isRest ? 'rest' : 'on', octave, accent, slide });
   }
 
-  // Step count at bytes 110-111 (nibble-split of length-1)
-  const scMsb  = data[110] & 0x0F;
-  const scLsb  = data[111] & 0x0F;
-  const length = ((scMsb << 4) | scLsb) + 1;
+  // Step count
+  const scMsb = data[110];
+  const scLsb = data[111];
+  const length = scMsb === 0x01 ? 16 : scLsb;
 
   state.pattern.steps  = steps;
   state.pattern.length = Math.max(1, Math.min(16, length));
