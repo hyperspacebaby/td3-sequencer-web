@@ -528,20 +528,36 @@ function buildRestMask(steps) {
 
 // ── FROM TD-3: SysEx → pattern ────────────────────────────────────────────────
 function sysexToPattern(data) {
-  // data = Uint8Array, 123 byte
   if (data.length < 123) {
     console.warn('SysEx troppo corto:', data.length);
   }
+
+  const mask4 = [data[118], data[119], data[120], data[121]];
+
+  // Log rest bytes + step gates per debug
+  const restHex = Array.from(mask4).map(b=>b.toString(16).padStart(2,'0')).join(' ');
+  const stepGatesFromMask = Array.from({length:16},(_,i)=>restIsSet(mask4,i)?'R':'O').join('');
+  debugLog('REST mask='+restHex+'  gates='+stepGatesFromMask, mask4);
 
   const steps = [];
   for (let i = 0; i < 16; i++) {
     const ms = data[12 + i * 2] & 0x0F;
     const ls = data[13 + i * 2] & 0x0F;
+    const rawPitch = ((ms & 0x0F) << 4) | (ls & 0x0F);
     const { semitone, octave } = nibblesToPitch(ms, ls);
 
     const accent = (data[44 + i * 2] === 0x00 && data[45 + i * 2] === 0x01);
     const slide  = (data[76 + i * 2] === 0x00 && data[77 + i * 2] === 0x01);
-    const isRest = restIsSet([data[118], data[119], data[120], data[121]], i);
+
+    // PRIMARY: use pitch to determine gate
+    // 0x18 = canonical null/rest (C norm with no note intended)
+    // Any pitch != 0x18 is considered an active step
+    // Also check rest mask as secondary confirmation
+    const isRestByPitch = (rawPitch === 0x18);
+    const isRestByMask  = restIsSet(mask4, i);
+    // If mask says all steps are rest but pitches vary, trust the pitch
+    const allRest = stepGatesFromMask === 'RRRRRRRRRRRRRRRR';
+    const isRest  = allRest ? isRestByPitch : isRestByMask;
 
     steps.push({ pitch: semitone, gate: isRest ? 'rest' : 'on', octave, accent, slide });
   }
