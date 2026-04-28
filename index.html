@@ -179,9 +179,19 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   <span class="footer-hint">FROM TD-3 requires Input+Output selected · SysEx via USB only</span>
 </div>
 
+<!-- DEBUG PANEL -->
+<div style="background:#06090f;border:1px solid #1c2230;border-radius:10px;padding:10px 12px;margin-top:2px">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+    <span style="font-size:9px;font-weight:900;letter-spacing:1.4px;color:#5cd0ff">SYSEX DEBUG</span>
+    <button onclick="document.getElementById('debug-panel').innerHTML=''" style="padding:3px 8px;border-radius:4px;background:#0e1420;border:1px solid #2b4258;color:#5a6170;font-family:'Courier New',monospace;font-size:9px;cursor:pointer">CLEAR</button>
+    <span style="color:#3f4858;font-size:9px;margin-left:auto">byte[8]=grp(0-3) byte[9]=pat(A:1-8 B:9-16)</span>
+  </div>
+  <div id="debug-panel" style="font-family:'Courier New',monospace;font-size:11px;line-height:1.7;min-height:40px;color:#6e7480">
+    <div style="color:#3f4858;font-style:italic">Press FROM TD-3 to capture SysEx bytes…</div>
+  </div>
 </div>
 
-<!-- TOAST -->
+</div>
 <div class="toast" id="toast"></div>
 
 <!-- DEVICES MODAL -->
@@ -596,8 +606,21 @@ function sendToTD3() {
       return;
     }
     out.send(sysex);
+    debugLog(`→ TX PUT  G${state.group}·B${state.bank}·${state.section}`, sysex);
     flash(`→ TD-3 G${state.group}·B${state.bank}·${state.section} saved`);
   } catch(e) { flash('Send error: ' + e.message); }
+}
+
+function debugLog(label, bytes) {
+  const hex = Array.from(bytes).map(b => b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+  const panel = document.getElementById('debug-panel');
+  const line = document.createElement('div');
+  line.style.cssText = 'margin-bottom:4px;word-break:break-all;';
+  const ts = new Date().toLocaleTimeString('it-IT',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  line.innerHTML = `<span style="color:#5a6170">[${ts}]</span> <span style="color:#9be4ff;font-weight:bold">${label}</span><br><span style="color:#cfd5dd;font-size:10px;letter-spacing:0.5px">${hex}</span>`;
+  panel.insertBefore(line, panel.firstChild);
+  // keep last 6 entries
+  while (panel.children.length > 6) panel.removeChild(panel.lastChild);
 }
 
 function fetchFromTD3() {
@@ -611,19 +634,19 @@ function fetchFromTD3() {
   if (!state.midiAccess.sysexEnabled) { flash('Enable SysEx in MIDI permissions'); return; }
 
   const [grp, pat] = td3SlotBytes();
-  // Request Pattern: F0 00 20 32 00 01 0A 77 <group> <pattern> F7
   const req = [0xF0, ...TD3_HDR, 0x77, grp, pat, 0xF7];
+  debugLog(`→ TX  G${state.group} B${state.bank} ${state.section}  (grp=${grp} pat=${pat})`, req);
 
   let timeoutId = null;
   function onMsg(e) {
     const d = e.data;
-    // Check header: F0 00 20 32 00 01 0A 78
     if (d.length < 8) return;
     if (d[0] !== 0xF0) return;
     if (d[1]!==0x00||d[2]!==0x20||d[3]!==0x32||d[4]!==0x00||d[5]!==0x01||d[6]!==0x0A) return;
     if (d[7] !== 0x78) return;
     clearTimeout(timeoutId);
     inp.onmidimessage = null;
+    debugLog(`← RX  grp=${d[8]} pat=${d[9]}  len=${d.length}`, d);
     try {
       sysexToPattern(d);
       renderSeq();
