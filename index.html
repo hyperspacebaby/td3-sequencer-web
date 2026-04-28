@@ -533,7 +533,7 @@ function td3SlotBytes() {
   const grp  = (state.group - 1) & 0x03;          // 0-3
   const bank = parseInt(state.bank, 10) - 1;       // 0-7
   const sec  = state.section === 'A' ? 0 : 1;      // 0 or 1
-  const pat  = bank + (sec * 8) + 1;               // 1-8 (A) or 9-16 (B)
+  const pat  = bank + (sec * 8);                  // 0-7 (A) or 8-15 (B)
   return [grp, pat];
 }
 
@@ -541,7 +541,7 @@ function td3SlotBytes() {
 function patternToSysex() {
   const p  = state.pattern;
   const [grp, pat] = td3SlotBytes();
-  const msg = [0xF0, ...TD3_HDR, 0x78, grp, pat, 0x00, 0x00];
+  const msg = [0xF0, ...TD3_HDR, 0x76, grp, pat, 0x00, 0x00];
 
   // Pitches: 16 steps × 2 bytes (MSB nibble, LSB nibble)
   // TD-3 pitch is one octave lower than MIDI standard.
