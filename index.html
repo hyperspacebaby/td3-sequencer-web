@@ -108,6 +108,64 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 .pill.on{background:#0e1a26;border-color:#5cd0ff;color:#9be4ff}
 .close-btn{padding:7px 14px;border-radius:6px;background:#9be4ff;border:none;color:#08111c;font-family:'Courier New',monospace;font-size:11px;font-weight:900;letter-spacing:1.2px;cursor:pointer;margin-top:18px}
 .midi-info{color:#5a6170;font-size:10px;line-height:1.6;margin-top:8px;padding:8px;background:#080a0f;border-radius:6px;border:1px solid #1c2230}
+
+/* LFO PANEL */
+.lfo-panel{background:#090c12;border-radius:12px;border:1px solid #1c2a40;padding:10px 12px;display:none;flex-direction:column;gap:8px}
+.lfo-panel.open{display:flex}
+.lfo-panel-header{display:flex;align-items:center;gap:8px;margin-bottom:2px}
+.lfo-panel-title{font-size:9px;font-weight:900;letter-spacing:2px;color:#5cd0ff;flex:1}
+.lfo-close-btn{width:22px;height:22px;border-radius:4px;background:#0a1420;border:1px solid #1c2a40;color:#5a6170;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;font-family:'Courier New',monospace}
+.lfo-close-btn:hover{color:#9be4ff;border-color:#2b4258}
+.lfo-list{display:flex;flex-direction:column;gap:6px}
+.lfo-row{display:flex;align-items:stretch;gap:0;border-radius:8px;overflow:hidden;border:1px solid #1c2a40;background:#0c1018;position:relative}
+.lfo-row.lfo-active{border-color:#5cd0ff44}
+.lfo-section{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 10px;gap:5px;border-right:1px solid #1c2a40;min-width:0}
+.lfo-section:last-child{border-right:none}
+.lfo-section-label{font-size:7px;font-weight:900;letter-spacing:1.8px;color:#3d4f68;text-align:center}
+/* Wave section */
+.lfo-section.wave{flex:0 0 auto;min-width:110px}
+.wave-btns{display:flex;gap:4px}
+.wave-btn{width:30px;height:28px;border-radius:5px;background:#0a0d14;border:1px solid #1c2a3a;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.12s;padding:0}
+.wave-btn svg{display:block}
+.wave-btn.on{background:#0c1c30;border-color:#5cd0ff;box-shadow:0 0 6px #5cd0ff55}
+.wave-btn.on svg path,.wave-btn.on svg rect,.wave-btn.on svg polyline,.wave-btn.on svg line{stroke:#9be4ff}
+/* Rate section */
+.lfo-section.rate{flex:1;min-width:120px}
+.rate-mode-toggle{display:flex;gap:3px;margin-bottom:2px}
+.rate-mode-btn{padding:3px 8px;border-radius:4px;background:#0a0d14;border:1px solid #1c2a3a;font-family:'Courier New',monospace;font-size:8px;font-weight:800;letter-spacing:1px;color:#3d4f68;cursor:pointer;transition:all 0.12s}
+.rate-mode-btn.on{background:#0c1c30;border-color:#5cd0ff;color:#9be4ff}
+.rate-bpm-row{display:flex;align-items:center;gap:5px}
+.rate-stepper-btn{width:20px;height:20px;border-radius:3px;background:#0e1420;border:1px solid #1f2a3a;color:#9ad7ff;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;font-family:'Courier New',monospace;line-height:1}
+.rate-stepper-btn:hover{background:#142030}
+.rate-val{font-size:11px;font-weight:800;min-width:36px;text-align:center;color:#cfe9ff;font-variant-numeric:tabular-nums}
+.rate-knob-wrap{position:relative;width:36px;height:36px;cursor:pointer}
+.rate-knob-outer{width:36px;height:36px;border-radius:50%;background:#0a0c10;border:2px solid #5cd0ff;display:flex;align-items:center;justify-content:center;box-shadow:0 0 8px #5cd0ff66}
+.rate-knob-inner{width:26px;height:26px;border-radius:50%;background:#111418;border:1px solid #2a3040;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.rate-knob-notch{position:absolute;width:100%;height:100%;display:flex;align-items:flex-start;justify-content:center;padding-top:3px}
+.rate-knob-dot{width:3px;height:8px;background:#5cd0ff;border-radius:2px}
+/* Target section */
+.lfo-section.target{flex:0 0 auto;min-width:100px}
+.target-btn{padding:5px 10px;border-radius:5px;background:#0a0d14;border:1px solid #1c2a3a;color:#5a6a80;font-family:'Courier New',monospace;font-size:8px;font-weight:800;letter-spacing:1px;cursor:pointer;text-align:center;transition:all 0.12s;white-space:nowrap}
+.target-btn:hover{background:#0d1520;border-color:#2b4258}
+.target-btn.has-target{border-color:#3effb6;color:#3effb6;background:#081a14}
+/* LFO viz */
+.lfo-viz{height:28px;border-radius:3px;overflow:hidden;background:#060810;border:1px solid #10162a;position:relative}
+.lfo-viz svg{display:block;width:100%;height:100%}
+/* Kill btn */
+.lfo-kill-btn{position:absolute;top:5px;right:5px;width:16px;height:16px;border-radius:3px;background:#1a0c0c;border:1px solid #3a1c1c;color:#ff5b3e88;cursor:pointer;font-size:9px;display:flex;align-items:center;justify-content:center;font-family:'Courier New',monospace;opacity:0;transition:opacity 0.15s}
+.lfo-row:hover .lfo-kill-btn{opacity:1}
+.lfo-kill-btn:hover{color:#ff5b3e;border-color:#ff5b3e88}
+/* Add LFO button */
+.lfo-add-btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:7px;border-radius:7px;background:#0a0d14;border:1px dashed #1c2a40;color:#3d4f68;font-family:'Courier New',monospace;font-size:9px;font-weight:800;letter-spacing:1.4px;cursor:pointer;transition:all 0.15s}
+.lfo-add-btn:hover{border-color:#5cd0ff55;color:#5cd0ff;background:#0a1420}
+.lfo-add-btn.maxed{opacity:0.3;cursor:not-allowed;pointer-events:none}
+/* Target picker modal */
+.target-picker{position:absolute;bottom:calc(100% + 6px);right:0;background:#0c1018;border:1px solid #2b4258;border-radius:8px;padding:8px;display:none;flex-direction:column;gap:4px;z-index:200;min-width:140px;box-shadow:0 4px 24px #00000088}
+.target-picker.open{display:flex}
+.target-picker-title{font-size:7px;font-weight:900;letter-spacing:1.8px;color:#3d4f68;margin-bottom:2px}
+.target-pill{padding:5px 10px;border-radius:5px;background:#0e1420;border:1px solid #1f2a3a;color:#6e7480;font-family:'Courier New',monospace;font-size:10px;font-weight:800;cursor:pointer;transition:all 0.12s}
+.target-pill:hover{background:#121a28;color:#9be4ff}
+.target-pill.on{background:#0e1a26;border-color:#5cd0ff;color:#9be4ff}
 </style>
 </head>
 <body>
@@ -182,10 +240,21 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   <div class="seq-inner" id="seq-inner"></div>
 </div>
 
+<!-- LFO PANEL -->
+<div class="lfo-panel" id="lfo-panel">
+  <div class="lfo-panel-header">
+    <span class="lfo-panel-title">⋯ LFO ENGINE</span>
+    <button class="lfo-close-btn" onclick="closeLfoPanel()">✕</button>
+  </div>
+  <div class="lfo-list" id="lfo-list"></div>
+  <button class="lfo-add-btn" id="lfo-add-btn" onclick="addLfo()">+ ADD LFO</button>
+</div>
+
 <!-- FOOTER -->
 <div class="footer">
   <button class="footer-btn" onclick="fetchFromTD3()">↓ FROM TD-3</button>
   <button class="footer-btn" onclick="sendToTD3()">↑ TO TD-3</button>
+  <button class="footer-btn" id="lfo-toggle-btn" onclick="toggleLfoPanel()" style="border-color:#5cd0ff44;color:#9be4ff">◎ LFO</button>
   <span class="footer-hint">FROM TD-3 requires Input+Output selected · SysEx via USB only</span>
 </div>
 
@@ -1161,6 +1230,281 @@ function makeLaneRow(label){
   const lt=document.createElement('span');lt.className='lane-label-text';lt.textContent=label;
   lbl.appendChild(lt);row.appendChild(lbl);
   return row;
+}
+
+// Init
+renderSeq();
+renderTransport();
+renderPatternsModal();
+initMidi();
+document.getElementById('modal-patterns').querySelector('.modal-card').onclick=e=>e.stopPropagation();
+
+// ══════════════════════════════════════════════════════════════
+// LFO ENGINE
+// TD-3 CC targets (official Behringer TD-3 MIDI implementation):
+//   Cutoff        CC 74
+//   Resonance     CC 71
+//   Env Mod Depth CC 12
+//   Decay         CC 75  (CC 80 on some firmware — 75 is canonical)
+//   Accent        CC 16
+//   Filter Track  CC 13
+// ══════════════════════════════════════════════════════════════
+const LFO_TARGETS = [
+  {label:'CUTOFF',     cc:74},
+  {label:'RESONANCE',  cc:71},
+  {label:'ENV MOD',    cc:12},
+  {label:'DECAY',      cc:75},
+  {label:'ACCENT',     cc:16},
+  {label:'FILTER TRK', cc:13},
+];
+const LFO_MAX = 3;
+const LFO_BPM_DIVS = ['1/16','1/8','1/4','1/2','1/1','2/1','4/1'];
+const LFO_BPM_MULTS= [0.25,  0.5,  1,    2,    4,    8,    16   ]; // beat multiples
+
+let lfoState = {
+  open: false,
+  lfos: [], // [{id,wave,rateMode,bpmDiv,knobRate,target,phase,animId,active}]
+  nextId: 0,
+};
+
+function makeLfo(){
+  return {
+    id: lfoState.nextId++,
+    wave: 'sin',       // 'sin'|'tri'|'sqr'
+    rateMode: 'bpm',   // 'bpm'|'knob'
+    bpmDivIdx: 2,      // index into LFO_BPM_DIVS (default 1/4)
+    knobRate: 64,      // 0-127 manual rate
+    target: null,      // null or index into LFO_TARGETS
+    phase: 0,
+    lastCcVal: -1,
+    animId: null,
+    active: true,
+  };
+}
+
+function lfoWaveValue(wave, phase){
+  // phase 0..1
+  switch(wave){
+    case 'sin': return (Math.sin(phase*2*Math.PI)+1)/2;
+    case 'tri': return phase<0.5? phase*2 : 2-phase*2;
+    case 'sqr': return phase<0.5? 1 : 0;
+  }
+  return 0;
+}
+
+function lfoFreqHz(lfo){
+  if(lfo.rateMode==='knob'){
+    // 0-127 maps ~0.05Hz to ~20Hz (log)
+    return 0.05 * Math.pow(400, lfo.knobRate/127);
+  }
+  // BPM sync
+  const bpm = state.pattern.bpm || 120;
+  const beats = LFO_BPM_MULTS[lfo.bpmDivIdx];
+  const beatsPerSec = bpm/60;
+  return beatsPerSec/beats;
+}
+
+// Per-LFO animation tick
+let _lfoLastTs = {};
+function lfoTick(id, ts){
+  const lfo = lfoState.lfos.find(l=>l.id===id);
+  if(!lfo || !lfo.active) return;
+
+  const dt = _lfoLastTs[id]!==undefined ? (ts-_lfoLastTs[id])/1000 : 0;
+  _lfoLastTs[id] = ts;
+
+  const freq = lfoFreqHz(lfo);
+  lfo.phase = (lfo.phase + freq*dt) % 1;
+  const val = lfoWaveValue(lfo.wave, lfo.phase);
+  const ccVal = Math.round(val*127);
+
+  // Send MIDI CC if target set and value changed
+  if(lfo.target!==null && ccVal!==lfo.lastCcVal){
+    const t = LFO_TARGETS[lfo.target];
+    sendCC(t.cc, ccVal);
+    lfo.lastCcVal = ccVal;
+  }
+
+  // Update mini viz
+  updateLfoViz(id, lfo.phase, lfo.wave);
+
+  lfo.animId = requestAnimationFrame(ts2=>lfoTick(id,ts2));
+}
+
+function startLfo(id){
+  const lfo = lfoState.lfos.find(l=>l.id===id);
+  if(!lfo) return;
+  if(lfo.animId) cancelAnimationFrame(lfo.animId);
+  delete _lfoLastTs[id];
+  lfo.animId = requestAnimationFrame(ts=>lfoTick(id,ts));
+}
+
+function stopLfo(id){
+  const lfo = lfoState.lfos.find(l=>l.id===id);
+  if(!lfo) return;
+  if(lfo.animId){ cancelAnimationFrame(lfo.animId); lfo.animId=null; }
+}
+
+// ── viz (scrolling wave on canvas-like SVG path) ──────────────
+function updateLfoViz(id, phase, wave){
+  const svg = document.getElementById(`lfo-viz-path-${id}`);
+  if(!svg) return;
+  const W=120, H=20, pts=[];
+  for(let x=0;x<W;x++){
+    const p=((x/W)+phase)%1;
+    const y=H-(lfoWaveValue(wave,p)*(H-2)+1);
+    pts.push(`${x},${y.toFixed(1)}`);
+  }
+  svg.setAttribute('points', pts.join(' '));
+}
+
+// ── render LFO list ───────────────────────────────────────────
+function renderLfoList(){
+  const list = document.getElementById('lfo-list');
+  if(!list) return;
+  list.innerHTML='';
+  lfoState.lfos.forEach(lfo=>{ list.appendChild(buildLfoRow(lfo)); });
+  // add btn state
+  const addBtn = document.getElementById('lfo-add-btn');
+  if(addBtn) addBtn.className='lfo-add-btn'+(lfoState.lfos.length>=LFO_MAX?' maxed':'');
+}
+
+function buildLfoRow(lfo){
+  const row=document.createElement('div');
+  row.className='lfo-row'+(lfo.active?' lfo-active':'');
+  row.id=`lfo-row-${lfo.id}`;
+
+  // ── WAVE SECTION ──
+  const waveSec=document.createElement('div');
+  waveSec.className='lfo-section wave';
+  const waveLbl=document.createElement('div');waveLbl.className='lfo-section-label';waveLbl.textContent='WAVE';
+  const waveBtns=document.createElement('div');waveBtns.className='wave-btns';
+  [
+    {k:'sin', svg:'<svg width="20" height="16" viewBox="0 0 20 16"><path d="M0,8 C3,8 3,2 5,2 S7,14 10,14 S13,2 15,2 S17,8 20,8" fill="none" stroke="#3d5070" stroke-width="1.5" stroke-linecap="round"/></svg>'},
+    {k:'tri', svg:'<svg width="20" height="16" viewBox="0 0 20 16"><polyline points="0,8 5,2 10,14 15,2 20,8" fill="none" stroke="#3d5070" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'},
+    {k:'sqr', svg:'<svg width="20" height="16" viewBox="0 0 20 16"><polyline points="0,8 0,2 10,2 10,14 20,14 20,8" fill="none" stroke="#3d5070" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'},
+  ].forEach(w=>{
+    const btn=document.createElement('button');
+    btn.className='wave-btn'+(lfo.wave===w.k?' on':'');
+    btn.innerHTML=w.svg;
+    btn.title=w.k.toUpperCase();
+    btn.onclick=()=>{lfo.wave=w.k;renderLfoList();};
+    waveBtns.appendChild(btn);
+  });
+  // Mini viz
+  const viz=document.createElement('div');viz.className='lfo-viz';viz.style.width='80px';
+  viz.innerHTML=`<svg viewBox="0 0 120 20" preserveAspectRatio="none"><polyline id="lfo-viz-path-${lfo.id}" points="" fill="none" stroke="#5cd0ff" stroke-width="1.5" opacity="0.7"/></svg>`;
+  waveSec.appendChild(waveLbl);waveSec.appendChild(waveBtns);waveSec.appendChild(viz);
+
+  // ── RATE SECTION ──
+  const rateSec=document.createElement('div');
+  rateSec.className='lfo-section rate';
+  const rateLbl=document.createElement('div');rateLbl.className='lfo-section-label';rateLbl.textContent='RATE';
+  const modeToggle=document.createElement('div');modeToggle.className='rate-mode-toggle';
+  ['bpm','knob'].forEach(m=>{
+    const b=document.createElement('button');
+    b.className='rate-mode-btn'+(lfo.rateMode===m?' on':'');
+    b.textContent=m.toUpperCase();
+    b.onclick=()=>{lfo.rateMode=m;renderLfoList();};
+    modeToggle.appendChild(b);
+  });
+  let rateControl;
+  if(lfo.rateMode==='bpm'){
+    rateControl=document.createElement('div');rateControl.className='rate-bpm-row';
+    const bm=document.createElement('button');bm.className='rate-stepper-btn';bm.textContent='−';
+    bm.onclick=()=>{lfo.bpmDivIdx=Math.max(0,lfo.bpmDivIdx-1);renderLfoList();};
+    const rv=document.createElement('span');rv.className='rate-val';rv.textContent=LFO_BPM_DIVS[lfo.bpmDivIdx];
+    const bp=document.createElement('button');bp.className='rate-stepper-btn';bp.textContent='+';
+    bp.onclick=()=>{lfo.bpmDivIdx=Math.min(LFO_BPM_DIVS.length-1,lfo.bpmDivIdx+1);renderLfoList();};
+    rateControl.appendChild(bm);rateControl.appendChild(rv);rateControl.appendChild(bp);
+  } else {
+    // Knob rate — draggable mini knob
+    rateControl=document.createElement('div');rateControl.style.display='flex';rateControl.style.alignItems='center';rateControl.style.gap='6px';
+    const kw=document.createElement('div');kw.className='rate-knob-wrap';
+    const angle=-135+lfo.knobRate/127*270;
+    kw.innerHTML=`<div class="rate-knob-outer"><div class="rate-knob-inner"><div class="rate-knob-notch" style="transform:rotate(${angle}deg)"><div class="rate-knob-dot"></div></div></div></div>`;
+    // Drag behavior
+    let dragging=false,startY=0,startVal=0;
+    kw.onmousedown=e=>{dragging=true;startY=e.clientY;startVal=lfo.knobRate;e.preventDefault();};
+    kw.ontouchstart=e=>{dragging=true;startY=e.touches[0].clientY;startVal=lfo.knobRate;};
+    const move=e=>{if(!dragging)return;const cy=e.touches?e.touches[0].clientY:e.clientY;lfo.knobRate=Math.max(0,Math.min(127,Math.round(startVal-(cy-startY)*0.8)));renderLfoList();};
+    const up=()=>{dragging=false;};
+    document.addEventListener('mousemove',move);document.addEventListener('mouseup',up);
+    document.addEventListener('touchmove',move);document.addEventListener('touchend',up);
+    const rv=document.createElement('span');rv.className='rate-val';rv.style.fontSize='10px';rv.textContent=lfo.knobRate;
+    rateControl.appendChild(kw);rateControl.appendChild(rv);
+  }
+  rateSec.appendChild(rateLbl);rateSec.appendChild(modeToggle);rateSec.appendChild(rateControl);
+
+  // ── TARGET SECTION ──
+  const targSec=document.createElement('div');
+  targSec.className='lfo-section target';targSec.style.position='relative';
+  const targLbl=document.createElement('div');targLbl.className='lfo-section-label';targLbl.textContent='TARGET';
+  const targBtn=document.createElement('button');
+  const tLabel=lfo.target!==null?LFO_TARGETS[lfo.target].label:'SELECT ▾';
+  targBtn.className='target-btn'+(lfo.target!==null?' has-target':'');
+  targBtn.textContent=tLabel;
+  // Target picker dropdown
+  const picker=document.createElement('div');picker.className='target-picker';picker.id=`lfo-picker-${lfo.id}`;
+  const pTitle=document.createElement('div');pTitle.className='target-picker-title';pTitle.textContent='PARAMETER';
+  picker.appendChild(pTitle);
+  LFO_TARGETS.forEach((t,ti)=>{
+    const tp=document.createElement('div');
+    tp.className='target-pill'+(lfo.target===ti?' on':'');
+    tp.textContent=t.label;
+    tp.onclick=(e)=>{e.stopPropagation();lfo.target=ti;picker.classList.remove('open');renderLfoList();flash(`LFO ${lfo.id+1} → ${t.label} · CC${t.cc}`);};
+    picker.appendChild(tp);
+  });
+  targBtn.onclick=(e)=>{e.stopPropagation();picker.classList.toggle('open');};
+  document.addEventListener('click',()=>picker.classList.remove('open'),{once:true});
+  targSec.appendChild(targLbl);targSec.appendChild(targBtn);targSec.appendChild(picker);
+
+  // ── KILL BTN ──
+  const killBtn=document.createElement('button');
+  killBtn.className='lfo-kill-btn';killBtn.textContent='✕';killBtn.title='Remove LFO';
+  killBtn.onclick=()=>removeLfo(lfo.id);
+
+  row.appendChild(waveSec);row.appendChild(rateSec);row.appendChild(targSec);row.appendChild(killBtn);
+  return row;
+}
+
+// ── panel controls ────────────────────────────────────────────
+function toggleLfoPanel(){
+  lfoState.open=!lfoState.open;
+  const panel=document.getElementById('lfo-panel');
+  if(panel) panel.className='lfo-panel'+(lfoState.open?' open':'');
+  const btn=document.getElementById('lfo-toggle-btn');
+  if(btn){
+    btn.style.borderColor=lfoState.open?'#5cd0ff':'#5cd0ff44';
+    btn.style.background=lfoState.open?'#0a1c2c':'';
+    btn.style.boxShadow=lfoState.open?'0 0 8px #5cd0ff44':'';
+  }
+  if(lfoState.open && lfoState.lfos.length===0) addLfo();
+}
+
+function closeLfoPanel(){
+  lfoState.open=false;
+  const panel=document.getElementById('lfo-panel');
+  if(panel) panel.className='lfo-panel';
+  const btn=document.getElementById('lfo-toggle-btn');
+  if(btn){btn.style.borderColor='#5cd0ff44';btn.style.background='';btn.style.boxShadow='';}
+}
+
+function addLfo(){
+  if(lfoState.lfos.length>=LFO_MAX){flash('MAX 3 LFOs');return;}
+  const lfo=makeLfo();
+  lfoState.lfos.push(lfo);
+  renderLfoList();
+  startLfo(lfo.id);
+  flash(`LFO ${lfoState.lfos.length} ADDED`);
+}
+
+function removeLfo(id){
+  stopLfo(id);
+  lfoState.lfos=lfoState.lfos.filter(l=>l.id!==id);
+  delete _lfoLastTs[id];
+  renderLfoList();
+  flash('LFO REMOVED');
 }
 
 // Init
