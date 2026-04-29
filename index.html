@@ -257,8 +257,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   <button class="t-btn" onclick="clearAll()" title="Clear">🗑</button>
   <button class="t-btn" onclick="savePattern()" title="Save">💾</button>
   <button class="t-btn" onclick="loadPattern()" title="Load">📂</button>
-  <button class="t-btn t-btn-clock" id="clock-btn" onclick="toggleClockMode()" title="Receive ext MIDI clock">CLK</button>
-  <button class="t-btn t-btn-clock" id="master-clock-btn" onclick="toggleMasterClock()" title="Send MIDI clock to TD-3">MST</button>
+  <button class="t-btn t-btn-clock" id="clock-btn" onclick="toggleClockMode()">CLK</button>
   <button class="t-btn t-btn-play" id="play-btn" onclick="togglePlay()">▶</button>
 </div>
 
@@ -291,9 +290,9 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 <div class="footer">
   <button class="footer-btn" onclick="fetchFromTD3()">↓ FROM TD-3</button>
   <button class="footer-btn" id="pitch-to-td-btn" onclick="pitchToTD3()">♩ PITCH TO TD</button>
-  <button class="footer-btn" id="time-to-td-btn" onclick="timeToTD3()">♟ PATTERN TO TD</button>
+  <button class="footer-btn" id="time-to-td-btn" onclick="timeToTD3()">⏱ TIME TO TD</button>
   <button class="footer-btn" id="lfo-toggle-btn" onclick="toggleLfoPanel()" style="border-color:#5cd0ff44;color:#9be4ff">◎ LFO</button>
-  <span class="footer-hint">① PAT WRITE + USB clock → PATTERN TO TD  · ② PITCH MODE on HW → PITCH TO TD</span>
+  <span class="footer-hint">① PITCH MODE on HW → PITCH TO TD · ② TIME MODE on HW → TIME TO TD</span>
 </div>
 
 </div>
@@ -356,14 +355,11 @@ let state = {
   stepRef:0, dirRef:1, intervalId:null,
   invertPhase:0,
   slideTime: 64,          // CC#5 Portamento Time sent to TD-3 (0-127)
-  // MIDI clock reception (ext clock slave)
+  // MIDI clock reception
   clockMode:false,
   clockPulse:0,
   clockLastTime:null,
   clockBpmBuf:[],
-  // MIDI clock master (app sends clock to TD-3)
-  masterClock:false,
-  masterClockId:null,     // setInterval id for clock pulses
 };
 
 // Audio context for preview
@@ -1019,85 +1015,73 @@ function td3SlotBytes() {
 }
 
 // Convert app pattern → TD-3 SysEx 0x78 payload
-// Encoding verified against 303patterns.com spec.
 function patternToSysex() {
-  const p   = state.pattern;
+  const p  = state.pattern;
   const [grp, pat] = td3SlotBytes();
-  // F0 header + TD3_HDR + cmd 0x78 + grp + pat + 0x00 0x00
   const msg = [0xF0, ...TD3_HDR, 0x78, grp, pat, 0x00, 0x00];
 
-  // Helper: same bitmask layout for tie/rest
-  // Layout: xxxx7654 xxxx3210 xxxxFEDC xxxxBA98
-  // byte0=steps7-4, byte1=steps3-0, byte2=stepsF-C, byte3=stepsB-8
-  function makeBitmask(gateName, defaultBit) {
-    const bits = [defaultBit, defaultBit, defaultBit, defaultBit];
-    const byteMap = [1, 0, 3, 2]; // group->byte index
-    for (let i = 0; i < 16; i++) {
-      if (p.steps[i].gate === gateName) {
-        const byteIdx = byteMap[Math.floor(i / 4)];
-        const bitPos  = 3 - (i % 4);
-        if (defaultBit === 0x0F)
-          bits[byteIdx] &= ~(1 << bitPos); // clear bit (rest: start all-1, clear active)
-        else
-          bits[byteIdx] |=  (1 << bitPos); // set bit   (tie: start all-0, set ties)
-      }
-    }
-    return bits;
-  }
-
-  // Pitches: 16 steps x 2 bytes (MSB=octave 0x00/0x01/0x02, LSB=semitone 0x00-0x0B)
+  // Pitches: 16 steps × 2 bytes (MSB nibble, LSB nibble)
+  // TD-3 pitch is one octave lower than MIDI standard.
+  // We store raw semitone 0-12 (C..C+octave), no octave offset needed here.
+  const NULL_PITCH = 0x18; // canonical null = C2 in TD-3 land
   for (let i = 0; i < 16; i++) {
     const s = p.steps[i];
     if (s.gate === 'on') {
-      const msb = s.octave < 0 ? 0x00 : s.octave > 0 ? 0x02 : 0x01;
-      msg.push(msb, s.pitch & 0x0F);
+      // Add octave offset: base octave 3 * 12 = 36 midi, TD-3 is -12 = 24
+      // But we encode relative to TD-3's 0x00=C, so pitch 0-12 maps 0x00-0x0C
+      // with s.octave (-1/0/1) shifting MSB nibble
+      const rawPitch = s.pitch & 0x0F;         // 0-11 (semitone)
+      const msb = (s.octave < 0) ? 0x00 : (s.octave > 0 ? 0x02 : 0x01);
+      msg.push(msb, rawPitch);
     } else {
-      msg.push(0x00, 0x08); // canonical null pitch
+      msg.push(0x00, NULL_PITCH & 0x0F); // null/rest = 0x18 split: 0x01 0x08
+      // canonical: 0x00 0x18 — use 0x00 0x00 as rest
+      msg[msg.length - 2] = 0x00;
+      msg[msg.length - 1] = 0x00;
     }
   }
 
-  // Accent: 16 steps x 2 bytes
+  // Accent: 16 steps × 2 bytes
   for (let i = 0; i < 16; i++) {
     const s = p.steps[i];
     msg.push(0x00, (s.gate === 'on' && s.accent) ? 0x01 : 0x00);
   }
 
-  // Slide: 16 steps x 2 bytes
+  // Slide: 16 steps × 2 bytes
   for (let i = 0; i < 16; i++) {
     const s = p.steps[i];
     msg.push(0x00, (s.gate === 'on' && s.slide) ? 0x01 : 0x00);
   }
 
-  // Triplet: off
+  // Triplet mode (0x6C-0x6D): off
   msg.push(0x00, 0x00);
 
-  // Step count
+  // Step count (0x6E-0x6F): split as 2-byte nibble pair
   const len = Math.max(1, Math.min(16, p.length));
-  msg.push(len <= 8 ? 0x00 : 0x01, len <= 8 ? len - 1 : len - 9);
+  msg.push(len > 8 ? 0x01 : 0x00, len > 8 ? (len - 9) : (len - 1));
 
-  // Unknown
+  // Unknown (0x70-0x71)
   msg.push(0x00, 0x00);
 
-  // Tie bitmask (start all-0, set tie steps)
-  msg.push(...makeBitmask('tie', 0x00));
+  // Tie (0x72-0x75): all zeros (no tie info in our model)
+  msg.push(0x00, 0x00, 0x00, 0x00);
 
-  // Rest bitmask (start all-1 = 0x0F, clear bits for BOTH 'on' AND 'tie' steps).
-  // BUG FIX: original code used makeBitmask('on', 0x0F) which left TIE steps as
-  // REST in this mask — the TD-3 saw them as rests and cut off the held note.
-  function makeRestBitmask() {
-    const bits = [0x0F, 0x0F, 0x0F, 0x0F];
-    const byteMap = [1, 0, 3, 2];
-    for (let i = 0; i < 16; i++) {
-      if (p.steps[i].gate === 'on' || p.steps[i].gate === 'tie') {
-        const byteIdx = byteMap[Math.floor(i / 4)];
-        const bitPos  = 3 - (i % 4);
-        bits[byteIdx] &= ~(1 << bitPos);
-      }
+  // Rest bitmask (0x76-0x79): bitmask, bit=1 means RESTING, active steps clear bit
+  // Layout: xxxx7654 xxxx3210 xxxxFEDC xxxxBA98
+  let restBits = [0x0F, 0x0F, 0x0F, 0x0F];
+  for (let i = 0; i < 16; i++) {
+    if (p.steps[i].gate === 'on') {
+      const byteIdx = Math.floor(i / 4);
+      const bitIdx  = i % 4;
+      // bit position within nibble: step 0→bit0, step 1→bit1... but layout is inverted
+      // layout per spec: xxxx7654 xxxx3210 xxxxFEDC xxxxBA98
+      // byte0 nibble: steps 7,6,5,4; byte1 nibble: steps 3,2,1,0
+      // byte2 nibble: steps F,E,D,C; byte3 nibble: steps B,A,9,8
+      const stepInNibble = 3 - bitIdx; // bit3=first step in group
+      restBits[byteIdx] &= ~(1 << stepInNibble);
     }
-    return bits;
   }
-  msg.push(...makeRestBitmask());
-
+  msg.push(...restBits);
   msg.push(0xF7);
   return msg;
 }
@@ -1110,20 +1094,15 @@ function sysexToPattern(data) {
   // 0x4C..0x6B = slide (32 bytes)
   // 0x6C-0x6D = triplet
   // 0x6E-0x6F = step count
-  // 0x72-0x75 = tie bitmask
+  // 0x72-0x75 = tie
   // 0x76-0x79 = rest bitmask
-  //
-  // BUG FIX: bitmasks use byteMap=[1,0,3,2] layout (same as patternToSysex writer).
-  // Original sequential indexing (Math.floor(i/4)) swapped steps 0-3 with 4-7
-  // (and 8-11 with 12-15), making all notes read back as rests.
-  // Also added TIE bitmask decoding so fetched patterns preserve tied notes.
-  const byteMap = [1, 0, 3, 2];
   const steps = [];
   for (let i = 0; i < 16; i++) {
     const pBase = 0x0C + i * 2;
     const msb   = data[pBase];
     const lsb   = data[pBase + 1];
-    const semitone = lsb & 0x0F;
+    const pitch = ((msb & 0x0F) << 4) | (lsb & 0x0F); // combined 8-bit value
+    const semitone = pitch & 0x0F;                      // lower nibble = semitone
     const octave   = (msb === 0x00) ? -1 : (msb === 0x02 ? 1 : 0);
 
     const aBase  = 0x2C + i * 2;
@@ -1131,22 +1110,14 @@ function sysexToPattern(data) {
     const sBase  = 0x4C + i * 2;
     const slide  = data[sBase + 1] === 0x01;
 
-    // Use byteMap to select the correct bitmask byte for this step group
-    const groupIdx = Math.floor(i / 4);
-    const byteIdx  = byteMap[groupIdx];
-    const bitPos   = 3 - (i % 4);
-
-    const isRest = (data[0x76 + byteIdx] >> bitPos) & 1;  // 0x76 = rest bitmask start
-    const isTie  = (data[0x72 + byteIdx] >> bitPos) & 1;  // 0x72 = tie bitmask start
-
-    let gate = 'rest';
-    if (!isRest) {
-      gate = isTie ? 'tie' : 'on';
-    }
+    // Rest bitmask: 0x76-0x79
+    const byteIdx      = Math.floor(i / 4);
+    const stepInNibble = 3 - (i % 4);
+    const isRest       = (data[0x76 + byteIdx] >> stepInNibble) & 1;
 
     steps.push({
       pitch: semitone,
-      gate,
+      gate: isRest ? 'rest' : 'on',
       octave,
       accent,
       slide
@@ -1327,100 +1298,61 @@ function pitchToTD3() {
   sendNext();
 }
 
-// ── PATTERN TO TD-3 ──────────────────────────────────────────────────────────
-// Sends full pattern via SysEx 0x78 PUT.
-// TD-3 must be: MODE=PAT WRITE, clock=USB, DIN cables unplugged.
+// ── TIME TO TD-3 ──────────────────────────────────────────────────────────────
+// The TD-3 must be in TIME MODE (press TIME MODE button on HW first).
+// In TIME MODE the hardware expects one button press per step:
+//   Button 9   (A4 0x11) = NOTE  — normal 16th note step (gate='on' or filled)
+//   Button 0   (A4 0x12) = TIE   — tie / extend previous note (gate='tie')
+//   Button 100 (A4 0x13) = REST  — silence this step (gate='rest')
+// TIME MODE auto-exits on the HW once all steps are filled.
+// We send Key Aftertouch Ch5 (status byte 0xA4) press+release per step.
 
 function timeToTD3() {
   if (!state.outId) { flash('No MIDI output — connect TD-3 first'); return; }
-  if (!state.midiAccess) { flash('MIDI not ready'); return; }
-  if (!state.midiAccess.sysexEnabled) { flash('SysEx not enabled — reload and allow SysEx'); return; }
-  const out = state.midiAccess.outputs.get(state.outId);
+  const out = state.midiAccess && state.midiAccess.outputs.get(state.outId);
   if (!out) { flash('TD-3 output not found'); return; }
 
-  let msg;
-  try { msg = patternToSysex(); } catch(e) { flash('Build error: ' + e.message); return; }
+  const p   = state.midiAccess.outputs.get(state.outId);
+  const len = Math.max(1, Math.min(16, state.pattern.length));
 
-  // Log the full hex for debugging
-  const hex = Array.from(msg).map(b => b.toString(16).toUpperCase().padStart(2,'0')).join(' ');
-  console.log('PATTERN SYSEX (' + msg.length + ' bytes):', hex);
+  // Map each step gate to the correct TD-3 TIME MODE button byte:
+  //   gate='on'   → 0x11 (Button 9 / NOTE)
+  //   gate='tie'  → 0x12 (Button 0 / TIE)
+  //   gate='rest' → 0x13 (Button 100 / REST)
+  const GATE_TO_BTN = { 'on': 0x11, 'tie': 0x12, 'rest': 0x13 };
 
-  try {
-    out.send(msg);
-    flash('PATTERN → G' + state.group + ' B' + state.bank + ' ' + state.section + ' (' + msg.length + 'b)');
-    showSendBar('PATTERN TO TD-3', 1, 1);
-    setTimeout(hideSendBar, 1500);
-  } catch(e) {
-    flash('Send error: ' + e.message);
-    console.error('SysEx send failed:', e);
+  const steps = [];
+  for (let i = 0; i < len; i++) {
+    const gate = state.pattern.steps[i].gate;
+    steps.push(GATE_TO_BTN[gate] || 0x11); // default NOTE if undefined
   }
-}
 
-// ── MIDI CLOCK MASTER ────────────────────────────────────────────────────────
-// When active, sends MIDI clock (0xF8) at 24PPQN to the TD-3 over USB.
-// Also sends Start (0xFA) / Stop (0xFC) so TD-3 follows app play/stop.
-// Use this when TD-3 clock source = USB and you want the app to be master.
+  _sendCancelled = false;
+  let i = 0;
+  const STEP_MS = 120; // fast enough to be reliable, slow enough for HW to register
 
-let _masterClockInterval = null;
+  function sendNextTime() {
+    if (_sendCancelled) return;
+    if (i >= steps.length) {
+      hideSendBar();
+      flash(`TIME DONE · ${steps.length} steps sent`);
+      return;
+    }
 
-function toggleMasterClock() {
-  state.masterClock = !state.masterClock;
-  const btn = document.getElementById('master-clock-btn');
+    const btn = steps[i];
+    // Key Aftertouch: 0xA4 = Ch5 polyphonic aftertouch
+    // press:   A4 btn 01
+    // release: A4 btn 00
+    out.send([0xA4, btn, 0x01]);
+    setTimeout(() => out.send([0xA4, btn, 0x00]), 40); // 40ms pulse width
 
-  if (state.masterClock) {
-    startMasterClock();
-    btn.className = 't-btn t-btn-clock active';
-    btn.title = 'MASTER CLOCK ON — click to stop';
-    flash('MASTER CLK ON · ' + state.pattern.bpm + ' BPM');
-  } else {
-    stopMasterClock();
-    btn.className = 't-btn t-btn-clock';
-    btn.title = 'Send MIDI clock to TD-3';
-    flash('MASTER CLK OFF');
+    showSendBar('TIME TO TD', i + 1, steps.length);
+    i++;
+    setTimeout(sendNextTime, STEP_MS);
   }
-}
 
-function startMasterClock() {
-  stopMasterClock(); // clear any existing
-  const bpm = state.pattern.bpm;
-  // 24 pulses per quarter note → interval = 60000 / (bpm * 24) ms
-  const intervalMs = 60000 / (bpm * 24);
-  _masterClockInterval = setInterval(() => {
-    sendRaw([0xF8]); // MIDI Clock tick
-  }, intervalMs);
-}
-
-function stopMasterClock() {
-  if (_masterClockInterval) {
-    clearInterval(_masterClockInterval);
-    _masterClockInterval = null;
-  }
-}
-
-function sendRaw(bytes) {
-  if (!state.midiAccess || !state.outId) return;
-  const out = state.midiAccess.outputs.get(state.outId);
-  if (out) out.send(bytes);
-}
-
-// Restart master clock when BPM changes
-const _origSetBpm = setBpm;
-function setBpm(n) {
-  _origSetBpm(n);
-  if (state.masterClock) startMasterClock(); // restart with new tempo
-}
-
-// When play starts/stops, send MIDI Start/Stop to TD-3 if master clock is on
-const _origStartSeq = startSeq;
-function startSeq() {
-  _origStartSeq();
-  if (state.masterClock) sendRaw([0xFA]); // MIDI Start
-}
-
-const _origStopSeq = stopSeq;
-function stopSeq() {
-  _origStopSeq();
-  if (state.masterClock) sendRaw([0xFC]); // MIDI Stop
+  flash(`TIME MODE · ${len} steps…`);
+  sendNextTime();
 }
 
 // Toast
