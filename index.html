@@ -81,8 +81,8 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 .lane-dot{width:4px;height:4px;border-radius:50%;background:#2c3849}
 .accent-dot{width:16px;height:16px;border-radius:50%;background:#0a0d14;border:1.5px solid #3a4660}
 .accent-dot.on{background:#5cd0ff;border-color:#9be4ff;box-shadow:0 0 8px #5cd0ff}
-.slide-dot{width:20px;height:14px;border-radius:3px;background:#0a0d14;border:1.5px solid #3a4660;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900;color:#3a4660;letter-spacing:0}
-.slide-dot.on{background:#162030;border-color:#7ac8ff;color:#9be4ff;box-shadow:0 0 6px #9be4ff88}
+.slide-dot{width:18px;height:18px;border-radius:50%;background:#0a0d14;border:1.5px solid #3a4660;display:flex;align-items:center;justify-content:center;font-size:13px;color:#3a4660;line-height:1}
+.slide-dot.on{background:#0d1e2e;border-color:#7ac8ff;color:#9be4ff;box-shadow:0 0 7px #9be4ff88}
 .oct-up{color:#7ad0ff;font-size:14px}
 .oct-down{color:#ffb04a;font-size:14px}
 
@@ -158,6 +158,12 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
     <button class="stepper-btn" onclick="setZoom(state.zoom-6)">−</button>
     <span class="stepper-value" id="zoom-val">40px</span>
     <button class="stepper-btn" onclick="setZoom(state.zoom+6)">+</button>
+  </div>
+  <div class="stepper">
+    <span class="stepper-label">SLIDE</span>
+    <button class="stepper-btn" onclick="setSlide(state.slideTime-5)">−</button>
+    <span class="stepper-value" id="slide-val">64</span>
+    <button class="stepper-btn" onclick="setSlide(state.slideTime+5)">+</button>
   </div>
   <div class="step-counter">
     <span class="step-counter-label">STEP</span>
@@ -241,6 +247,7 @@ let state = {
   midiAccess:null, midiConnected:false,
   stepRef:0, dirRef:1, intervalId:null,
   invertPhase:0,
+  slideTime: 64,          // CC#5 Portamento Time sent to TD-3 (0-127)
   // MIDI clock reception
   clockMode:false,
   clockPulse:0,
@@ -359,6 +366,18 @@ function sendNoteOff(midi){
   if(!state.midiAccess||!state.outId)return;
   const out=state.midiAccess.outputs.get(state.outId);
   if(out)out.send([0x80,midi,0]);
+}
+function sendCC(cc, val){
+  if(!state.midiAccess||!state.outId)return;
+  const out=state.midiAccess.outputs.get(state.outId);
+  if(out)out.send([0xB0, cc, val]);   // Ch1 CC
+}
+function setSlide(n){
+  state.slideTime = Math.max(0, Math.min(127, n));
+  document.getElementById('slide-val').textContent = state.slideTime;
+  // CC#5 = Portamento Time — controls the TD-3 slide knob directly
+  sendCC(5, state.slideTime);
+  flash('SLIDE · CC5 → ' + state.slideTime);
 }
 
 // ── MIDI Clock reception ──────────────────────────────────────────────────────
@@ -511,6 +530,7 @@ function playStep(idx){
   const vel  = s.accent ? 110 : 80;
   const dur  = stepIntervalMs();
   sendNoteOn(midi, vel);
+  sendCC(65, s.slide ? 127 : 0);   // CC#65 Portamento On/Off per step
   if(!state.outId) triggerNote(midi, dur, s.accent, s.slide);
   // Slide: NoteOff fires after next NoteOn → legato overlap → TD-3 portamento
   // Normal: staccato gate at 72%
@@ -980,6 +1000,7 @@ function renderTransport(){
   document.getElementById('bpm-val').textContent=state.pattern.bpm;
   document.getElementById('len-val').textContent=state.pattern.length;
   document.getElementById('zoom-val').textContent=state.zoom+'px';
+  document.getElementById('slide-val').textContent=state.slideTime;
   document.getElementById('step-display').textContent=`— / ${state.pattern.length}`;
 }
 
@@ -1010,7 +1031,7 @@ function renderLaneCell(i){
   const acc=document.getElementById(`acc-${i}`);
   if(acc){acc.querySelector('.accent-dot').className='accent-dot'+(s.accent?' on':'');}
   const sld=document.getElementById(`sld-${i}`);
-  if(sld){const d=sld.querySelector('.slide-dot');d.className='slide-dot'+(s.slide?' on':'');d.textContent='~›';}
+  if(sld){const d=sld.querySelector('.slide-dot');d.className='slide-dot'+(s.slide?' on':'');d.textContent='~';}
 }
 
 function renderStepHighlight(){
@@ -1126,7 +1147,7 @@ function renderSeq(){
     const lc=document.createElement('div');
     lc.className='lane-cell'+(i>=state.pattern.length?' beyond':'');
     lc.style.width=cw+'px';lc.id=`sld-${i}`;
-    lc.innerHTML=`<div class="slide-dot${s.slide?' on':''}">~›</div>`;
+    lc.innerHTML=`<div class="slide-dot${s.slide?' on':''}">~</div>`;
     const ii=i;lc.onclick=()=>toggleSlide(ii);
     sldRow.appendChild(lc);
   }
