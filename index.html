@@ -49,13 +49,13 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 
 /* SEQ SCROLL */
 .seq-wrap{background:#080a10;border-radius:12px;border:1px solid #1c2230;padding:8px;overflow-x:auto;overflow-y:visible}
-.seq-inner{display:inline-flex;flex-direction:column;gap:0}
+.seq-inner{display:inline-flex;flex-direction:column;gap:0;overflow:visible}
 .step-num-row{display:flex;margin-bottom:4px}
 .step-num-spacer{width:44px;flex-shrink:0}
 .step-num-cell{height:18px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#4a5366;flex-shrink:0}
 .step-num-cell.active{color:#9be4ff}
 .step-num-cell.beyond{opacity:0.25}
-.roll-row{display:flex;margin-bottom:2px}
+.roll-row{display:flex;margin-bottom:2px;overflow:visible}
 .row-label{width:44px;height:24px;padding-left:8px;display:flex;align-items:center;background:#0c1018;border-right:1px solid #161c28;border-radius:4px;margin-right:4px;flex-shrink:0}
 .row-label.black{background:#070910}
 .row-label.is-c{background:#101826}
@@ -71,6 +71,23 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 .cell-inner{width:65%;height:55%;border-radius:2px;background:#9be4ff;display:none}
 .cell.lit .cell-inner{display:block}
 .cell.lit.accent .cell-inner{background:#fff}
+/* Multi-step note bar — grid stays 100% aligned, visual merge via box-shadow */
+/* Head: lit normally, but extend a shadow rightward to cover the 2px gap */
+.cell.note-head{background:#dbe8f3;border-color:#cfe9ff;border-radius:3px;
+  box-shadow:2px 0 0 0 #dbe8f3;}
+.cell.note-head.accent{background:#fff;border-color:#fff;box-shadow:2px 0 0 0 #fff;}
+/* Body: fill the whole cell + extend shadow right, hide left edge via shadow from prev */
+.cell.note-body{background:#cce0f0;border-color:#cce0f0;border-radius:0;
+  box-shadow:-2px 0 0 0 #cce0f0, 2px 0 0 0 #cce0f0;}
+.cell.note-body.accent{background:#eef0ff;border-color:#eef0ff;
+  box-shadow:-2px 0 0 0 #eef0ff, 2px 0 0 0 #eef0ff;}
+/* Tail: fill cell, close off on the right, hide left edge */
+.cell.note-tail{background:#cce0f0;border-color:#cce0f0;border-radius:3px;
+  box-shadow:-2px 0 0 0 #cce0f0;}
+.cell.note-tail.accent{background:#eef0ff;border-color:#eef0ff;
+  box-shadow:-2px 0 0 0 #eef0ff;}
+/* Suppress dot on body/tail */
+.cell.note-body .cell-inner,.cell.note-tail .cell-inner{display:none}
 
 /* LANES */
 .lane-row{display:flex;margin-top:4px}
@@ -85,13 +102,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 .slide-dot.on{background:#0d1e2e;border-color:#7ac8ff;color:#9be4ff;box-shadow:0 0 7px #9be4ff88}
 .oct-up{color:#7ad0ff;font-size:14px}
 .oct-down{color:#ffb04a;font-size:14px}
-/* TIME lane — NOTE ● / TIE ○ / REST — per step */
-.time-cell{height:30px;margin-right:2px;border-radius:4px;background:#10141d;border:1px solid #1f2738;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-size:13px;font-weight:900;color:#2c3849;letter-spacing:0;transition:all 0.12s}
-.time-cell:hover{background:#141820}
-.time-cell.is-note{background:#0e1a26;border-color:#5cd0ff;color:#9be4ff;box-shadow:0 0 6px #5cd0ff44}
-.time-cell.is-tie{background:#1c1400;border-color:#ffaa00;color:#ffaa00;box-shadow:0 0 6px #ffaa0044}
-.time-cell.is-rest{background:#0a0d14;border-color:#2a3040;color:#3a4455}
-.time-cell.sending{box-shadow:0 0 14px #5cd0ffcc;border-color:#fff;color:#fff;transform:scale(1.1)}
+
 
 /* FOOTER */
 .footer{display:flex;align-items:center;gap:8px;padding:4px}
@@ -186,9 +197,11 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   <div class="mode-buttons">
     <button class="mode-btn active" id="btn-forward" data-mode="forward" onclick="applyMode('forward')">▶ FWD</button>
     <button class="mode-btn" id="btn-bounce" data-mode="bounce" onclick="applyMode('bounce')">⇄ BOUNCE</button>
-    <button class="mode-btn" id="btn-reverse" data-mode="reverse" onclick="applyMode('reverse')">REVERSE</button>
-    <button class="mode-btn" id="btn-random" data-mode="random" onclick="applyMode('random')">RANDOM</button>
     <button class="mode-btn" id="btn-invert" data-mode="invert" onclick="applyMode('invert')">INVERT</button>
+    <button class="mode-btn" id="btn-random" data-mode="random" onclick="applyMode('random')">RANDOM</button>
+    <button class="mode-btn" id="btn-reverse" data-mode="reverse" onclick="applyMode('reverse')">REVERSE</button>
+    <button class="mode-btn" id="btn-weave" data-mode="weave" onclick="applyMode('weave')">WEAVE</button>
+    <button class="mode-btn" id="btn-octflip" data-mode="octflip" onclick="applyMode('octflip')">OCT FLIP</button>
   </div>
   <div class="metal-spacer"></div>
   <div class="status-col">
@@ -277,8 +290,9 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 <div class="footer">
   <button class="footer-btn" onclick="fetchFromTD3()">↓ FROM TD-3</button>
   <button class="footer-btn" id="pitch-to-td-btn" onclick="pitchToTD3()">♩ PITCH TO TD</button>
+  <button class="footer-btn" id="time-to-td-btn" onclick="timeToTD3()">⏱ TIME TO TD</button>
   <button class="footer-btn" id="lfo-toggle-btn" onclick="toggleLfoPanel()" style="border-color:#5cd0ff44;color:#9be4ff">◎ LFO</button>
-  <span class="footer-hint">① Set steps on HW · ② PITCH MODE → PITCH TO TD · ③ TIME MODE manually</span>
+  <span class="footer-hint">① PITCH MODE on HW → PITCH TO TD · ② TIME MODE on HW → TIME TO TD</span>
 </div>
 
 </div>
@@ -720,15 +734,68 @@ function togglePlay(){if(state.isPlaying)stopSeq();else startSeq();}
 // Pattern editing
 function updateStep(i,patch){
   state.pattern.steps[i]={...state.pattern.steps[i],...patch};
+  // If we just turned a step to rest, break any TIE chain that follows
+  if(patch.gate==='rest'){
+    for(let j=i+1;j<state.pattern.length;j++){
+      if(state.pattern.steps[j].gate==='tie') state.pattern.steps[j].gate='rest';
+      else break;
+    }
+  }
+  // Re-render this step and neighbors
   renderCell(i);
   renderLaneCell(i);
-  renderTimeCell(i);
 }
 function onCellPress(stepIdx,rowIdx){
   const pitchVal=ROW_PITCHES[rowIdx];
   const cur=state.pattern.steps[stepIdx];
   if(cur.gate==='on'&&cur.pitch===pitchVal) updateStep(stepIdx,{gate:'rest'});
   else updateStep(stepIdx,{pitch:pitchVal,gate:'on'});
+}
+
+// Right-click on a cell: extend the note bar by 1 step to the right.
+// If clicking on the last cell of an existing bar (tail), shrink it by 1.
+// If clicking on an empty / rest step, try to extend the note that ends just before it.
+function onCellRightClick(sIdx, pitchVal){
+  const p=state.pattern;
+  const len=p.length;
+
+  // Determine the head of the note we're acting on
+  let headIdx=null;
+
+  const role=barRole(sIdx,pitchVal);
+  if(role==='lit'||role==='head') headIdx=sIdx;
+  else if(role==='body'||role==='tail') headIdx=noteHeadOf(sIdx);
+  else {
+    // Clicked on a rest/empty — check if previous step is the tail of a note on this pitch
+    if(sIdx>0){
+      const prevRole=barRole(sIdx-1,pitchVal);
+      if(prevRole==='lit'||prevRole==='tail') headIdx=noteHeadOf(sIdx-1)??sIdx-1;
+    }
+  }
+
+  if(headIdx===null){ flash('RIGHT-CLICK a note to extend'); return; }
+
+  const span=noteSpan(headIdx);
+  const tailIdx=headIdx+span-1;
+
+  // If right-clicking on the actual last step (tail) of a multi-step bar → shrink
+  if(sIdx===tailIdx && span>1){
+    // Remove the last TIE step
+    p.steps[tailIdx].gate='rest';
+    // Re-render the whole bar range + the freed step
+    for(let j=headIdx;j<=tailIdx;j++) renderCell(j);
+    flash(`↔ ${span-1} step${span-1>1?'s':''}`);
+    return;
+  }
+
+  // Otherwise → extend: add one TIE step after the tail
+  const newTail=tailIdx+1;
+  if(newTail>=len){ flash('Cannot extend past pattern length'); return; }
+  if(p.steps[newTail].gate!=='rest'){ flash('Next step is occupied'); return; }
+
+  p.steps[newTail]={...p.steps[newTail], gate:'tie'};
+  for(let j=headIdx;j<=newTail;j++) renderCell(j);
+  flash(`↔ ${span+1} step${span+1>1?'s':''}`);
 }
 function cycleOctave(i){
   const cur=state.pattern.steps[i].octave;
@@ -738,16 +805,10 @@ function cycleOctave(i){
 function toggleAccent(i){updateStep(i,{accent:!state.pattern.steps[i].accent});}
 function toggleSlide(i){updateStep(i,{slide:!state.pattern.steps[i].slide});}
 
-// Cycle TIME lane: rest → on (NOTE) → tie (TIE) → rest
-function cycleGate(i) {
-  const cur = state.pattern.steps[i].gate;
-  const next = cur === 'rest' ? 'on' : cur === 'on' ? 'tie' : 'rest';
-  updateStep(i, {gate: next});
-  renderTimeCell(i);
-}
+
 
 function applyMode(m){
-  const angles = {forward:-45, bounce:0, reverse:45, random:135, invert:-135};
+  const angles = {forward:-45, bounce:0, reverse:45, random:135, invert:-135, weave:-90};
 
   // ── FORWARD: toggle direction, never touch notes ───────────────────────────
   if(m === 'forward'){
@@ -830,6 +891,89 @@ function applyMode(m){
     });
     document.getElementById('knob-notch').style.transform = `rotate(${angles.invert}deg)`;
     flash('INVERT · skip+back');
+    return;
+  }
+
+  // ── WEAVE: one-shot — physically reorder notes as invert would visit them ──
+  // Simulates the full invert visit sequence for `len` steps, reads the notes
+  // in that order, then writes them back into steps 0..len-1 so forward
+  // playback sounds identical to invert mode on the original pattern.
+  if(m === 'weave'){
+    const p = state.pattern;
+    const len = p.length;
+    const original = p.steps.slice(0, len).map(s => ({...s}));
+
+    // Simulate the exact same invert nextIndex logic to get visit order
+    const visitOrder = [];
+    let cur = 0, dir = 1, phase = 0;
+    visitOrder.push(0);
+    for(let step = 1; step < len; step++){
+      let n;
+      if(phase === 0){ n = cur + 2 * dir; phase = 1; }
+      else           { n = cur - 1 * dir; phase = 0; }
+      if(n >= len){ dir = -1; n = len - 1; phase = 0; }
+      if(n < 0)   { dir =  1; n = 0;       phase = 0; }
+      cur = n;
+      visitOrder.push(cur);
+    }
+
+    // Build new step array: position i gets the note that invert visits at tick i
+    const newSteps = visitOrder.map(srcIdx => ({...original[srcIdx]}));
+    p.steps = [...newSteps, ...p.steps.slice(len)];
+
+    renderSeq();
+    flash('WEAVE · invert baked → FWD');
+
+    // Stay in whatever playback mode we were in — just flash WEAVE briefly
+    document.querySelectorAll('.mode-btn').forEach(b=>{
+      b.className = 'mode-btn' + (b.dataset.mode === state.mode ? ' active' : '');
+    });
+    const weaveBtn = document.getElementById('btn-weave');
+    weaveBtn.classList.add('active');
+    setTimeout(() => { weaveBtn.classList.remove('active'); }, 400);
+    return;
+  }
+
+  // ── OCT FLIP: mirror all active notes vertically around the midpoint ─────────
+  // Computes min+max MIDI value across all gate='on' steps, then mirrors each
+  // note: newMidi = min + max - oldMidi. Decomposes back into pitch + octave.
+  if(m === 'octflip'){
+    const p = state.pattern;
+    const len = p.length;
+    const activeSteps = [];
+    for(let i = 0; i < len; i++){
+      if(p.steps[i].gate === 'on') activeSteps.push(i);
+    }
+    if(activeSteps.length === 0){ flash('No notes to flip'); return; }
+
+    const midiVals = activeSteps.map(i => p.steps[i].octave * 12 + p.steps[i].pitch);
+    const minMidi = Math.min(...midiVals);
+    const maxMidi = Math.max(...midiVals);
+
+    if(minMidi === maxMidi){ flash('All notes same pitch'); return; }
+
+    for(const i of activeSteps){
+      const s = p.steps[i];
+      const oldMidi = s.octave * 12 + s.pitch;
+      const newMidi = minMidi + maxMidi - oldMidi;
+      // Decompose newMidi back into octave (-1/0/1) + pitch (0-11)
+      let newOct = 0, newPitch = newMidi;
+      if(newMidi >= 12)    { newOct =  1; newPitch = newMidi - 12; }
+      else if(newMidi < 0) { newOct = -1; newPitch = newMidi + 12; }
+      newOct   = Math.max(-1, Math.min(1, newOct));
+      newPitch = Math.max(0,  Math.min(11, newPitch));
+      p.steps[i] = { ...s, pitch: newPitch, octave: newOct };
+    }
+
+    renderSeq();
+    flash('OCT FLIP · pitches mirrored');
+
+    document.querySelectorAll('.mode-btn').forEach(b=>{
+      b.className = 'mode-btn' + (b.dataset.mode === state.mode ? ' active' : '');
+    });
+    const octBtn = document.getElementById('btn-octflip');
+    octBtn.classList.add('active');
+    setTimeout(() => { octBtn.classList.remove('active'); }, 400);
     return;
   }
 }
@@ -1067,13 +1211,6 @@ function fetchFromTD3() {
   }
 }
 
-function highlightTimeCell(idx, on) {
-  const el = document.getElementById(`time-${idx}`);
-  if (!el) return;
-  if (on) el.classList.add('sending');
-  else el.classList.remove('sending');
-}
-
 function pitchToTD3() {
   if (!state.outId) { flash('No MIDI output — connect TD-3 first'); return; }
   const out = state.midiAccess && state.midiAccess.outputs.get(state.outId);
@@ -1082,19 +1219,40 @@ function pitchToTD3() {
   const p = state.pattern;
   const len = Math.max(1, Math.min(16, p.length));
 
-  // Only gate='on' steps have a pitch — rest and tie are skipped in pitch mode
-  const noteSteps = [];
-  for (let i = 0; i < len; i++) {
-    if (p.steps[i].gate === 'on') noteSteps.push(i);
+  // Find the "main note" fallback: lowest pitched active step (most root-like),
+  // or C (pitch 0, octave 0) if nothing is set at all.
+  let fallbackPitch = 0, fallbackOctave = 0, fallbackAccent = false;
+  const onSteps = p.steps.slice(0, len).filter(s => s.gate === 'on');
+  if (onSteps.length > 0) {
+    // Pick the lowest MIDI value among active notes as the "root" fallback
+    let lowestMidi = Infinity, lowestStep = null;
+    for (const s of onSteps) {
+      const m = 36 + (s.octave * 12) + s.pitch;
+      if (m < lowestMidi) { lowestMidi = m; lowestStep = s; }
+    }
+    fallbackPitch  = lowestStep.pitch;
+    fallbackOctave = lowestStep.octave;
+    fallbackAccent = lowestStep.accent;
   }
-  if (noteSteps.length === 0) { flash('No notes to send'); return; }
+
+  // Build a send list for EVERY step in the pattern length.
+  // gate='on' → use its own pitch; rest/tie → use fallback note.
+  // This ensures the TD-3 advances exactly one step per Note On in pitch mode.
+  const sendList = [];
+  for (let i = 0; i < len; i++) {
+    const s = p.steps[i];
+    if (s.gate === 'on') {
+      sendList.push({ pitch: s.pitch, octave: s.octave, accent: s.accent, slide: s.slide, stepIdx: i, isFallback: false });
+    } else {
+      // rest or tie — send the fallback (root) note so TD-3 still advances
+      sendList.push({ pitch: fallbackPitch, octave: fallbackOctave, accent: fallbackAccent, slide: false, stepIdx: i, isFallback: true });
+    }
+  }
 
   // TD-3 base octave = MIDI 36 (C2). Octave shift: -1 → 24, 0 → 36, +1 → 48
-  // Slide = next Note On fires BEFORE this Note Off (legato overlap)
-  // Accent = velocity 110 (above default threshold of 100). No accent = 70.
   const TD3_BASE = 36;
-  const STEP_MS  = 350; // ms per step — enough for TD-3 to register reliably
-  const GATE_MS  = 200; // normal note-off timing (non-slide)
+  const STEP_MS  = 350;
+  const GATE_MS  = 200;
 
   _sendCancelled = false;
   let i = 0;
@@ -1102,47 +1260,99 @@ function pitchToTD3() {
   function sendNext() {
     if (_sendCancelled) return;
 
-    // Always clean up previous note if it wasn't a slide into this step
+    // Clean up previous note
     if (i > 0) {
-      const prev = p.steps[noteSteps[i - 1]];
+      const prev = sendList[i - 1];
       if (!prev.slide) {
-        // Non-slide: send Note Off for previous before this Note On
         const prevMidi = TD3_BASE + (prev.octave * 12) + prev.pitch;
         out.send([0x80, prevMidi, 0]);
       }
-      // Slide: previous Note Off intentionally NOT sent yet —
-      // current Note On overlaps it → TD-3 detects slide
     }
 
-    if (i >= noteSteps.length) {
-      // After last note: send its Note Off (slide flag on last note has no effect)
-      if (noteSteps.length > 0) {
-        const last = p.steps[noteSteps[noteSteps.length - 1]];
+    if (i >= sendList.length) {
+      // Final note off
+      if (sendList.length > 0) {
+        const last = sendList[sendList.length - 1];
         const lastMidi = TD3_BASE + (last.octave * 12) + last.pitch;
         out.send([0x80, lastMidi, 0]);
       }
       hideSendBar();
-      flash(`PITCH DONE · ${noteSteps.length} notes sent`);
+      const noteCount = sendList.filter(s => !s.isFallback).length;
+      flash(`PITCH DONE · ${len} steps (${noteCount} notes + ${len - noteCount} fill)`);
       return;
     }
 
-    const stepIdx = noteSteps[i];
-    const s = p.steps[stepIdx];
-    const midi = TD3_BASE + (s.octave * 12) + s.pitch;
-    const vel  = s.accent ? 110 : 70;
+    const entry = sendList[i];
+    const midi = TD3_BASE + (entry.octave * 12) + entry.pitch;
+    const vel  = entry.accent ? 110 : 70;
 
-    out.send([0x90, midi, vel]); // Note On — pitch + octave + accent
+    out.send([0x90, midi, vel]);
 
-    showSendBar('PITCH TO TD', i + 1, noteSteps.length);
-    highlightTimeCell(stepIdx, true);
-    setTimeout(() => highlightTimeCell(stepIdx, false), STEP_MS * 0.6);
+    showSendBar('PITCH TO TD', i + 1, sendList.length);
 
     i++;
     setTimeout(sendNext, STEP_MS);
   }
 
-  flash(`PITCH MODE · ${noteSteps.length} notes…`);
+  flash(`PITCH MODE · ${len} steps…`);
   sendNext();
+}
+
+// ── TIME TO TD-3 ──────────────────────────────────────────────────────────────
+// The TD-3 must be in TIME MODE (press TIME MODE button on HW first).
+// In TIME MODE the hardware expects one button press per step:
+//   Button 9   (A4 0x11) = NOTE  — normal 16th note step (gate='on' or filled)
+//   Button 0   (A4 0x12) = TIE   — tie / extend previous note (gate='tie')
+//   Button 100 (A4 0x13) = REST  — silence this step (gate='rest')
+// TIME MODE auto-exits on the HW once all steps are filled.
+// We send Key Aftertouch Ch5 (status byte 0xA4) press+release per step.
+
+function timeToTD3() {
+  if (!state.outId) { flash('No MIDI output — connect TD-3 first'); return; }
+  const out = state.midiAccess && state.midiAccess.outputs.get(state.outId);
+  if (!out) { flash('TD-3 output not found'); return; }
+
+  const p   = state.midiAccess.outputs.get(state.outId);
+  const len = Math.max(1, Math.min(16, state.pattern.length));
+
+  // Map each step gate to the correct TD-3 TIME MODE button byte:
+  //   gate='on'   → 0x11 (Button 9 / NOTE)
+  //   gate='tie'  → 0x12 (Button 0 / TIE)
+  //   gate='rest' → 0x13 (Button 100 / REST)
+  const GATE_TO_BTN = { 'on': 0x11, 'tie': 0x12, 'rest': 0x13 };
+
+  const steps = [];
+  for (let i = 0; i < len; i++) {
+    const gate = state.pattern.steps[i].gate;
+    steps.push(GATE_TO_BTN[gate] || 0x11); // default NOTE if undefined
+  }
+
+  _sendCancelled = false;
+  let i = 0;
+  const STEP_MS = 120; // fast enough to be reliable, slow enough for HW to register
+
+  function sendNextTime() {
+    if (_sendCancelled) return;
+    if (i >= steps.length) {
+      hideSendBar();
+      flash(`TIME DONE · ${steps.length} steps sent`);
+      return;
+    }
+
+    const btn = steps[i];
+    // Key Aftertouch: 0xA4 = Ch5 polyphonic aftertouch
+    // press:   A4 btn 01
+    // release: A4 btn 00
+    out.send([0xA4, btn, 0x01]);
+    setTimeout(() => out.send([0xA4, btn, 0x00]), 40); // 40ms pulse width
+
+    showSendBar('TIME TO TD', i + 1, steps.length);
+    i++;
+    setTimeout(sendNextTime, STEP_MS);
+  }
+
+  flash(`TIME MODE · ${len} steps…`);
+  sendNextTime();
 }
 
 // Toast
@@ -1252,22 +1462,101 @@ function renderTransport(){
   document.getElementById('step-display').textContent=`— / ${state.pattern.length}`;
 }
 
+// Returns the 0-based step index of the NOTE head that owns step i (via TIE chain),
+// or null if step i is not part of any note.
+function noteHeadOf(i){
+  const p=state.pattern;
+  if(p.steps[i].gate==='on') return i;
+  if(p.steps[i].gate==='tie'){
+    // walk back to find the head
+    for(let j=i-1;j>=0;j--){
+      if(p.steps[j].gate==='on') return j;
+      if(p.steps[j].gate!=='tie') return null;
+    }
+  }
+  return null;
+}
+
+// Returns how many steps a NOTE at headIdx spans (1 = just itself, 2 = note+1 tie, etc.)
+function noteSpan(headIdx){
+  const p=state.pattern;
+  let span=1;
+  for(let j=headIdx+1;j<p.length;j++){
+    if(p.steps[j].gate==='tie') span++;
+    else break;
+  }
+  return span;
+}
+
+// Compute bar role for a cell: null | 'head' | 'body' | 'tail'
+function barRole(sIdx, pitchVal){
+  const p=state.pattern;
+  const s=p.steps[sIdx];
+  if(s.gate==='on' && s.pitch===pitchVal){
+    const span=noteSpan(sIdx);
+    return span===1 ? 'lit' : 'head';
+  }
+  if(s.gate==='tie'){
+    const head=noteHeadOf(sIdx);
+    if(head===null) return null;
+    const hs=p.steps[head];
+    if(hs.pitch!==pitchVal) return null;
+    // Is next step also a tie for this pitch?
+    const nextIsTie=(sIdx+1<p.length && p.steps[sIdx+1].gate==='tie');
+    return nextIsTie ? 'body' : 'tail';
+  }
+  return null;
+}
+
+function cellCls(sIdx, pitchVal, rIdx){
+  const p=state.pattern;
+  const s=p.steps[sIdx];
+  const beyond=sIdx>=p.length;
+  const isBlack=NOTE_NAMES[pitchVal%12].includes('#');
+  const role=barRole(sIdx,pitchVal);
+  const accent=(role==='lit'||role==='head') ? s.accent
+    : (role==='body'||role==='tail') ? p.steps[noteHeadOf(sIdx)].accent : false;
+
+  let cls='cell';
+  if(isBlack) cls+=' black';
+  if(sIdx%4===0) cls+=' beat';
+  if(beyond) cls+=' beyond';
+  if(state.currentStep===sIdx) cls+=' playhead';
+
+  if(role==='lit'){ cls+=' lit'; if(accent) cls+=' accent'; }
+  else if(role==='head'){ cls+=' note-head'; if(accent) cls+=' accent'; }
+  else if(role==='body'){ cls+=' note-body'; if(accent) cls+=' accent'; }
+  else if(role==='tail'){ cls+=' note-tail'; if(accent) cls+=' accent'; }
+
+  return cls;
+}
+
 function renderCell(sIdx){
-  const s=state.pattern.steps[sIdx];
-  ROW_PITCHES.forEach((p,rIdx)=>{
+  ROW_PITCHES.forEach((pitchVal,rIdx)=>{
     const el=document.getElementById(`cell-${sIdx}-${rIdx}`);
-    if(!el)return;
-    const lit=s.gate==='on'&&s.pitch===p;
-    const beyond=sIdx>=state.pattern.length;
-    let cls='cell';
-    if(NOTE_NAMES[p%12].includes('#'))cls+=' black';
-    if(sIdx%4===0)cls+=' beat';
-    if(beyond)cls+=' beyond';
-    if(state.currentStep===sIdx)cls+=' playhead';
-    if(lit)cls+=' lit';
-    if(lit&&s.accent)cls+=' accent';
-    el.className=cls;
+    if(!el) return;
+    el.className=cellCls(sIdx,pitchVal,rIdx);
   });
+  // Also re-render adjacent cells that may be part of the same bar
+  const p=state.pattern;
+  if(p.steps[sIdx].gate==='tie'){
+    const head=noteHeadOf(sIdx);
+    if(head!==null){
+      for(let j=head;j<=sIdx;j++){
+        ROW_PITCHES.forEach((pv,ri)=>{
+          const el=document.getElementById(`cell-${j}-${ri}`);
+          if(el) el.className=cellCls(j,pv,ri);
+        });
+      }
+    }
+  }
+  // Re-render the step after in case it was a tail that's now unlinked
+  if(sIdx+1<MAX_STEPS){
+    ROW_PITCHES.forEach((pv,ri)=>{
+      const el=document.getElementById(`cell-${sIdx+1}-${ri}`);
+      if(el) el.className=cellCls(sIdx+1,pv,ri);
+    });
+  }
 }
 
 function renderLaneCell(i){
@@ -1293,20 +1582,9 @@ function renderStepHighlight(){
       if(state.currentStep===i)cls+=' active';
       numEl.className=cls;
     }
-    ROW_PITCHES.forEach((p,rIdx)=>{
+    ROW_PITCHES.forEach((pitchVal,rIdx)=>{
       const el=document.getElementById(`cell-${i}-${rIdx}`);
-      if(!el)return;
-      const s=state.pattern.steps[i];
-      const lit=s.gate==='on'&&s.pitch===p;
-      const beyond=i>=state.pattern.length;
-      let cls='cell';
-      if(NOTE_NAMES[p%12].includes('#'))cls+=' black';
-      if(i%4===0)cls+=' beat';
-      if(beyond)cls+=' beyond';
-      if(state.currentStep===i)cls+=' playhead';
-      if(lit)cls+=' lit';
-      if(lit&&s.accent)cls+=' accent';
-      el.className=cls;
+      if(el) el.className=cellCls(i,pitchVal,rIdx);
     });
   }
 }
@@ -1330,33 +1608,24 @@ function renderSeq(){
   container.appendChild(snr);
 
   // Piano roll rows
-  ROW_PITCHES.forEach((p,rIdx)=>{
-    const isBlack=NOTE_NAMES[p%12].includes('#');
-    const isC=p%12===0;
+  ROW_PITCHES.forEach((pitchVal,rIdx)=>{
+    const isBlack=NOTE_NAMES[pitchVal%12].includes('#');
+    const isC=pitchVal%12===0;
     const row=document.createElement('div');row.className='roll-row';
     const lbl=document.createElement('div');
     lbl.className='row-label'+(isBlack?' black':'')+(isC?' is-c':'');
     const lt=document.createElement('span');lt.className='row-label-text';lt.textContent=ROW_LABELS[rIdx];
     lbl.appendChild(lt);row.appendChild(lbl);
     for(let sIdx=0;sIdx<MAX_STEPS;sIdx++){
-      const s=state.pattern.steps[sIdx];
-      const lit=s.gate==='on'&&s.pitch===p;
-      const beyond=sIdx>=state.pattern.length;
       const cell=document.createElement('div');
-      let cls='cell';
-      if(isBlack)cls+=' black';
-      if(sIdx%4===0)cls+=' beat';
-      if(beyond)cls+=' beyond';
-      if(state.currentStep===sIdx)cls+=' playhead';
-      if(lit)cls+=' lit';
-      if(lit&&s.accent)cls+=' accent';
-      cell.className=cls;
+      cell.className=cellCls(sIdx,pitchVal,rIdx);
       cell.style.width=cw+'px';
       cell.id=`cell-${sIdx}-${rIdx}`;
       const inner=document.createElement('div');inner.className='cell-inner';
       cell.appendChild(inner);
-      const si=sIdx,ri=rIdx;
+      const si=sIdx,ri=rIdx,pv=pitchVal;
       cell.onclick=()=>onCellPress(si,ri);
+      cell.oncontextmenu=(e)=>{ e.preventDefault(); onCellRightClick(si,pv); };
       row.appendChild(cell);
     }
     container.appendChild(row);
@@ -1401,32 +1670,10 @@ function renderSeq(){
   }
   container.appendChild(sldRow);
 
-  // TIME lane — NOTE ● / TIE ○ / REST —
-  const timeRow=makeLaneRow('TIME');
-  for(let i=0;i<MAX_STEPS;i++){
-    const lc=document.createElement('div');
-    const s=state.pattern.steps[i];
-    const beyond=i>=state.pattern.length;
-    lc.className='time-cell'+(beyond?' beyond':'')+' '+gateClass(s.gate);
-    lc.style.width=cw+'px';lc.id=`time-${i}`;
-    lc.textContent=gateLabel(s.gate);
-    const ii=i;lc.onclick=()=>cycleGate(ii);
-    timeRow.appendChild(lc);
-  }
-  container.appendChild(timeRow);
+
 }
 
-function gateLabel(gate){ return gate==='on'?'●':gate==='tie'?'○':'—'; }
-function gateClass(gate){ return gate==='on'?'is-note':gate==='tie'?'is-tie':'is-rest'; }
 
-function renderTimeCell(i){
-  const el=document.getElementById(`time-${i}`);
-  if(!el)return;
-  const s=state.pattern.steps[i];
-  const beyond=i>=state.pattern.length;
-  el.className='time-cell'+(beyond?' beyond':'')+' '+gateClass(s.gate);
-  el.textContent=gateLabel(s.gate);
-}
 
 function makeLaneRow(label){
   const row=document.createElement('div');row.className='lane-row';
