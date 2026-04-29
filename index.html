@@ -292,7 +292,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   <button class="footer-btn" id="pitch-to-td-btn" onclick="pitchToTD3()">♩ PITCH TO TD</button>
   <button class="footer-btn" id="time-to-td-btn" onclick="timeToTD3()">⏱ TIME TO TD</button>
   <button class="footer-btn" id="lfo-toggle-btn" onclick="toggleLfoPanel()" style="border-color:#5cd0ff44;color:#9be4ff">◎ LFO</button>
-  <span class="footer-hint">① PITCH MODE on HW → PITCH TO TD · ② TIME MODE on HW → TIME TO TD</span>
+  <span class="footer-hint">① PITCH MODE on TD-3 MO → PITCH TO TD · ② TIME MODE on TD-3 MO → TIME TO TD</span>
 </div>
 
 </div>
@@ -1298,38 +1298,39 @@ function pitchToTD3() {
   sendNext();
 }
 
-// ── TIME TO TD-3 ──────────────────────────────────────────────────────────────
-// The TD-3 must be in TIME MODE (press TIME MODE button on HW first).
+// ── TIME TO TD-3 MO ───────────────────────────────────────────────────────────
+// The TD-3 MO must be in TIME MODE (press TIME MODE button on HW first).
 // In TIME MODE the hardware expects one button press per step:
-//   Button 9   (A4 0x11) = NOTE  — normal 16th note step (gate='on' or filled)
-//   Button 0   (A4 0x12) = TIE   — tie / extend previous note (gate='tie')
-//   Button 100 (A4 0x13) = REST  — silence this step (gate='rest')
+//   NOTE  (A4 0x14) — normal 16th note step (gate='on')
+//   TIE   (A4 0x15) — tie / extend previous note (gate='tie')
+//   REST  (A4 0x16) — silence this step (gate='rest')
 // TIME MODE auto-exits on the HW once all steps are filled.
-// We send Key Aftertouch Ch5 (status byte 0xA4) press+release per step.
+// We send Polyphonic Key Aftertouch Ch5 (status byte 0xA4) press+release per step.
+// NOTE: TD-3 MO uses 0x14/0x15/0x16 — original TD-3 used 0x11/0x12/0x13.
 
 function timeToTD3() {
   if (!state.outId) { flash('No MIDI output — connect TD-3 first'); return; }
   const out = state.midiAccess && state.midiAccess.outputs.get(state.outId);
   if (!out) { flash('TD-3 output not found'); return; }
 
-  const p   = state.midiAccess.outputs.get(state.outId);
   const len = Math.max(1, Math.min(16, state.pattern.length));
 
-  // Map each step gate to the correct TD-3 TIME MODE button byte:
-  //   gate='on'   → 0x11 (Button 9 / NOTE)
-  //   gate='tie'  → 0x12 (Button 0 / TIE)
-  //   gate='rest' → 0x13 (Button 100 / REST)
-  const GATE_TO_BTN = { 'on': 0x11, 'tie': 0x12, 'rest': 0x13 };
+  // TD-3 MO Time Mode button bytes (Polyphonic Aftertouch Ch5 / 0xA4):
+  //   gate='on'   → 0x14 (NOTE)
+  //   gate='tie'  → 0x15 (TIE)
+  //   gate='rest' → 0x16 (REST)
+  const GATE_TO_BTN = { 'on': 0x14, 'tie': 0x15, 'rest': 0x16 };
 
   const steps = [];
   for (let i = 0; i < len; i++) {
     const gate = state.pattern.steps[i].gate;
-    steps.push(GATE_TO_BTN[gate] || 0x11); // default NOTE if undefined
+    steps.push(GATE_TO_BTN[gate] || 0x14); // default NOTE if undefined
   }
 
   _sendCancelled = false;
   let i = 0;
-  const STEP_MS = 120; // fast enough to be reliable, slow enough for HW to register
+  const STEP_MS = 150; // slightly more generous — MO HW registration is a touch slower
+  const PULSE_MS = 50; // press pulse width
 
   function sendNextTime() {
     if (_sendCancelled) return;
@@ -1340,11 +1341,11 @@ function timeToTD3() {
     }
 
     const btn = steps[i];
-    // Key Aftertouch: 0xA4 = Ch5 polyphonic aftertouch
+    // Polyphonic Key Aftertouch: 0xA4 = Ch5
     // press:   A4 btn 01
     // release: A4 btn 00
     out.send([0xA4, btn, 0x01]);
-    setTimeout(() => out.send([0xA4, btn, 0x00]), 40); // 40ms pulse width
+    setTimeout(() => out.send([0xA4, btn, 0x00]), PULSE_MS);
 
     showSendBar('TIME TO TD', i + 1, steps.length);
     i++;
