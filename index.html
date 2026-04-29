@@ -223,6 +223,12 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
     <span class="stepper-value" id="slide-val">64</span>
     <button class="stepper-btn" onclick="setSlide(state.slideTime+5)">+</button>
   </div>
+  <div class="stepper">
+    <span class="stepper-label">SWING</span>
+    <button class="stepper-btn" onclick="setSwing(state.pattern.swing-2)">−</button>
+    <span class="stepper-value" id="swing-val">0%</span>
+    <button class="stepper-btn" onclick="setSwing(state.pattern.swing+2)">+</button>
+  </div>
   <div class="step-counter">
     <span class="step-counter-label">STEP</span>
     <span class="step-counter-value" id="step-display">— / 16</span>
@@ -543,7 +549,43 @@ function onMidiClockMessage(e) {
 }
 
 // Sequencer engine
-function stepIntervalMs(){return(60000/state.pattern.bpm)/4;}
+function stepIntervalMs(){ return (60000 / state.pattern.bpm) / 4; }
+
+// Swing: returns the actual delay for this step index.
+// Even steps (0,2,4…) get base interval * (1 + swing/2),
+// odd steps (1,3,5…) get base interval * (1 - swing/2).
+// swing is 0–100 (%), clamped to useful range 0–66 to avoid 0ms odd steps.
+function swingDelayMs(stepIdx){
+  const base = stepIntervalMs();
+  const s = (state.pattern.swing || 0) / 100;  // 0.0–1.0
+  const isOdd = (stepIdx % 2) === 1;
+  // Classic MPC-style: push the off-beat back
+  // At swing=50% → even=1.5×base, odd=0.5×base (hard shuffle)
+  // At swing=0%  → even=odd=base (straight)
+  const ratio = isOdd ? (1 - s * 0.5) : (1 + s * 0.5);
+  return Math.max(10, base * ratio);
+}
+
+function scheduleNextStep(){
+  if(!state.isPlaying || state.clockMode) return;
+  const len = Math.max(1, state.pattern.length);
+  const next = nextIndex(state.stepRef, len);
+  const delay = swingDelayMs(state.stepRef); // delay until next step = current step's duration
+  state.intervalId = setTimeout(()=>{
+    if(!state.isPlaying) return;
+    state.stepRef = next;
+    state.currentStep = state.stepRef;
+    playStep(state.stepRef);
+    renderStepHighlight();
+    scheduleNextStep();
+  }, delay);
+}
+
+function setSwing(n){
+  state.pattern.swing = Math.max(0, Math.min(66, n));
+  document.getElementById('swing-val').textContent = state.pattern.swing + '%';
+  flash('SWING · ' + state.pattern.swing + '%');
+}
 
 function nextIndex(cur, len){
   const m = state.mode;
@@ -622,18 +664,12 @@ function startSeq(){
   playStep(state.stepRef);
   renderStepHighlight();
   if(!state.clockMode){
-    state.intervalId = setInterval(()=>{
-      const len = Math.max(1, state.pattern.length);
-      state.stepRef = nextIndex(state.stepRef, len);
-      state.currentStep = state.stepRef;
-      playStep(state.stepRef);
-      renderStepHighlight();
-    }, stepIntervalMs());
+    scheduleNextStep();
   }
   document.getElementById('play-btn').textContent = '■';
 }
 function stopSeq(){
-  if(state.intervalId) clearInterval(state.intervalId);
+  if(state.intervalId) clearTimeout(state.intervalId);
   state.intervalId = null;
   if(_osc){ try{ _osc.stop(); }catch(e){} _osc=null; _prevMidi=null; }
   state.isPlaying = false;
@@ -760,6 +796,7 @@ function setBpm(n){
 function setLen(n){state.pattern.length=Math.max(1,Math.min(16,n));document.getElementById('len-val').textContent=state.pattern.length;document.getElementById('step-display').textContent=`— / ${state.pattern.length}`;renderSeq();}
 function setZoom(n){state.zoom=Math.max(28,Math.min(72,n));document.getElementById('zoom-val').textContent=state.zoom+'px';renderSeq();}
 function clearAll(){state.pattern.steps=Array.from({length:MAX_STEPS},blankStep);renderSeq();flash('Cleared');}
+function renderTransportSwing(){document.getElementById('swing-val').textContent=(state.pattern.swing||0)+'%';}
 
 function savePattern(){
   try{localStorage.setItem(slotKey(state.group,state.bank,state.section),JSON.stringify(state.pattern));flash(`Saved → G${state.group}·B${state.bank}·${state.section}`);}
@@ -1070,6 +1107,7 @@ function renderTransport(){
   document.getElementById('len-val').textContent=state.pattern.length;
   document.getElementById('zoom-val').textContent=state.zoom+'px';
   document.getElementById('slide-val').textContent=state.slideTime;
+  document.getElementById('swing-val').textContent=(state.pattern.swing||0)+'%';
   document.getElementById('step-display').textContent=`— / ${state.pattern.length}`;
 }
 
@@ -1250,12 +1288,8 @@ document.getElementById('modal-patterns').querySelector('.modal-card').onclick=e
 //   Filter Track  CC 13
 // ══════════════════════════════════════════════════════════════
 const LFO_TARGETS = [
-  {label:'CUTOFF',     cc:74},
-  {label:'RESONANCE',  cc:71},
-  {label:'ENV MOD',    cc:12},
-  {label:'DECAY',      cc:75},
-  {label:'ACCENT',     cc:16},
-  {label:'FILTER TRK', cc:13},
+  {label:'CUTOFF',  cc:74},
+  {label:'ACCENT',  cc:120},
 ];
 const LFO_MAX = 3;
 const LFO_BPM_DIVS = ['1/16','1/8','1/4','1/2','1/1','2/1','4/1'];
