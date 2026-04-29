@@ -277,9 +277,8 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 <div class="footer">
   <button class="footer-btn" onclick="fetchFromTD3()">↓ FROM TD-3</button>
   <button class="footer-btn" id="pitch-to-td-btn" onclick="pitchToTD3()">♩ PITCH TO TD</button>
-  <button class="footer-btn" id="time-to-td-btn" onclick="timeToTD3()">⏱ TIME TO TD</button>
   <button class="footer-btn" id="lfo-toggle-btn" onclick="toggleLfoPanel()" style="border-color:#5cd0ff44;color:#9be4ff">◎ LFO</button>
-  <span class="footer-hint">① Set steps on HW · ② PITCH MODE → PITCH TO TD · ③ TIME MODE → TIME TO TD</span>
+  <span class="footer-hint">① Set steps on HW · ② PITCH MODE → PITCH TO TD · ③ TIME MODE manually</span>
 </div>
 
 </div>
@@ -1083,25 +1082,45 @@ function pitchToTD3() {
   const p = state.pattern;
   const len = Math.max(1, Math.min(16, p.length));
 
-  // Collect only the steps that have an actual note (gate='on')
-  // gate='tie' and gate='rest' are skipped — they have no pitch in pitch mode
+  // Only gate='on' steps have a pitch — rest and tie are skipped in pitch mode
   const noteSteps = [];
   for (let i = 0; i < len; i++) {
     if (p.steps[i].gate === 'on') noteSteps.push(i);
   }
-
   if (noteSteps.length === 0) { flash('No notes to send'); return; }
 
-  _sendCancelled = false;
-  const STEP_MS = 320; // ms between notes — slow enough for TD-3 to register each
-  const BASE_MIDI = (BASE_OCTAVE + 1) * 12; // middle C area
+  // TD-3 base octave = MIDI 36 (C2). Octave shift: -1 → 24, 0 → 36, +1 → 48
+  // Slide = next Note On fires BEFORE this Note Off (legato overlap)
+  // Accent = velocity 110 (above default threshold of 100). No accent = 70.
+  const TD3_BASE = 36;
+  const STEP_MS  = 350; // ms per step — enough for TD-3 to register reliably
+  const GATE_MS  = 200; // normal note-off timing (non-slide)
 
+  _sendCancelled = false;
   let i = 0;
 
   function sendNext() {
     if (_sendCancelled) return;
+
+    // Always clean up previous note if it wasn't a slide into this step
+    if (i > 0) {
+      const prev = p.steps[noteSteps[i - 1]];
+      if (!prev.slide) {
+        // Non-slide: send Note Off for previous before this Note On
+        const prevMidi = TD3_BASE + (prev.octave * 12) + prev.pitch;
+        out.send([0x80, prevMidi, 0]);
+      }
+      // Slide: previous Note Off intentionally NOT sent yet —
+      // current Note On overlaps it → TD-3 detects slide
+    }
+
     if (i >= noteSteps.length) {
-      // Send final Note Off for last note (non-slide cases)
+      // After last note: send its Note Off (slide flag on last note has no effect)
+      if (noteSteps.length > 0) {
+        const last = p.steps[noteSteps[noteSteps.length - 1]];
+        const lastMidi = TD3_BASE + (last.octave * 12) + last.pitch;
+        out.send([0x80, lastMidi, 0]);
+      }
       hideSendBar();
       flash(`PITCH DONE · ${noteSteps.length} notes sent`);
       return;
@@ -1109,104 +1128,20 @@ function pitchToTD3() {
 
     const stepIdx = noteSteps[i];
     const s = p.steps[stepIdx];
-    const midi = BASE_MIDI + (s.octave * 12) + s.pitch;
+    const midi = TD3_BASE + (s.octave * 12) + s.pitch;
     const vel  = s.accent ? 110 : 70;
-    const prevStepIdx = i > 0 ? noteSteps[i - 1] : null;
-    const prevSlide = prevStepIdx !== null ? p.steps[prevStepIdx].slide : false;
+
+    out.send([0x90, midi, vel]); // Note On — pitch + octave + accent
 
     showSendBar('PITCH TO TD', i + 1, noteSteps.length);
     highlightTimeCell(stepIdx, true);
-
-    // If previous step had slide: Note On overlaps (no Note Off yet) → TD-3 detects slide
-    // If no slide: send Note Off for previous note first, then this Note On
-    if (i > 0 && !prevSlide) {
-      const prevMidi = BASE_MIDI + (p.steps[prevStepIdx].octave * 12) + p.steps[prevStepIdx].pitch;
-      out.send([0x80, prevMidi, 0]); // Note Off previous
-    }
-
-    out.send([0x90, midi, vel]); // Note On current
-
-    setTimeout(() => { highlightTimeCell(stepIdx, false); }, STEP_MS * 0.6);
+    setTimeout(() => highlightTimeCell(stepIdx, false), STEP_MS * 0.6);
 
     i++;
     setTimeout(sendNext, STEP_MS);
   }
 
-  flash(`PITCH MODE · sending ${noteSteps.length} notes…`);
-  sendNext();
-}
-
-// ── TIME TO TD-3 ──────────────────────────────────────────────────────────────
-// TD-3 must be in TIME MODE (LED on) before pressing this button.
-// Sends exactly pattern.length events — one per step — hardware exits on last one.
-//
-// NOTE  (gate='on')  → Note On + Note Off (short pulse) — TD-3 registers as NOTE ●
-// TIE   (gate='tie') → Note On WITHOUT preceding Note Off (overlap) → TD-3 registers as TIE ○
-// REST  (gate='rest')→ No Note On, just wait the step duration → TD-3 registers as REST —
-//
-// Accent and slide are NOT part of time mode on the TD-3 hardware.
-
-function timeToTD3() {
-  if (!state.outId) { flash('No MIDI output — connect TD-3 first'); return; }
-  const out = state.midiAccess && state.midiAccess.outputs.get(state.outId);
-  if (!out) { flash('TD-3 output not found'); return; }
-
-  const p = state.pattern;
-  const len = Math.max(1, Math.min(16, p.length));
-  const PULSE_MIDI = 48; // C3 — arbitrary pitch, only timing matters
-  const STEP_MS = 320;   // duration per step
-  const PULSE_MS = 60;   // Note On duration for NOTE and TIE pulses
-
-  _sendCancelled = false;
-  let i = 0;
-  let lastNoteOn = false; // track if we left a note on (for TIE overlap)
-
-  function sendNext() {
-    if (_sendCancelled) return;
-    if (i >= len) {
-      // All steps sent — send final Note Off if needed
-      if (lastNoteOn) out.send([0x80, PULSE_MIDI, 0]);
-      hideSendBar();
-      flash(`TIME DONE · ${len} steps sent`);
-      return;
-    }
-
-    const s = p.steps[i];
-    const gate = s.gate; // 'on' | 'tie' | 'rest'
-
-    showSendBar('TIME TO TD', i + 1, len);
-    highlightTimeCell(i, true);
-
-    if (gate === 'on') {
-      // NOTE ● : send Note Off for any previous note, then a fresh Note On + Note Off
-      if (lastNoteOn) out.send([0x80, PULSE_MIDI, 0]);
-      out.send([0x90, PULSE_MIDI, 80]);
-      lastNoteOn = true;
-      setTimeout(() => {
-        if (!_sendCancelled) out.send([0x80, PULSE_MIDI, 0]);
-        lastNoteOn = false;
-      }, PULSE_MS);
-
-    } else if (gate === 'tie') {
-      // TIE ○ : do NOT send Note Off — overlap with next Note On = tie on TD-3
-      // If no note was already on, start one (handles tie at step 0 edge case)
-      if (!lastNoteOn) out.send([0x90, PULSE_MIDI, 80]);
-      lastNoteOn = true;
-      // Note stays on through this step — no Note Off until next NOTE or end
-
-    } else {
-      // REST — : send Note Off if anything was on, then silence
-      if (lastNoteOn) out.send([0x80, PULSE_MIDI, 0]);
-      lastNoteOn = false;
-    }
-
-    setTimeout(() => { highlightTimeCell(i, false); }, STEP_MS * 0.7);
-
-    i++;
-    setTimeout(sendNext, STEP_MS);
-  }
-
-  flash(`TIME MODE · sending ${len} steps…`);
+  flash(`PITCH MODE · ${noteSteps.length} notes…`);
   sendNext();
 }
 
