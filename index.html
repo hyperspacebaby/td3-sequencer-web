@@ -44,6 +44,8 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 .t-btn:hover{background:#142030}
 .t-btn-play{background:#9be4ff;border-color:#5cd0ff;color:#08111c;box-shadow:0 0 8px #5cd0ff88}
 .t-btn-play:hover{background:#b0ecff}
+.t-btn-clock{background:#0e1420;border-color:#2b4258;color:#5a6170;font-size:9px;font-weight:900;letter-spacing:1px}
+.t-btn-clock.active{background:#0e2a1d;border-color:#3effb6;color:#3effb6;box-shadow:0 0 6px #3effb688}
 
 /* SEQ SCROLL */
 .seq-wrap{background:#080a10;border-radius:12px;border:1px solid #1c2230;padding:8px;overflow-x:auto;overflow-y:visible}
@@ -140,9 +142,9 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   <div class="brand"><div class="brand-dot"></div><span class="brand-text">TD3.SEQ</span></div>
   <div class="stepper">
     <span class="stepper-label">BPM</span>
-    <button class="stepper-btn" onclick="setBpm(state.bpm-1)">−</button>
+    <button class="stepper-btn" onclick="setBpm(state.pattern.bpm-1)">−</button>
     <span class="stepper-value" id="bpm-val">120</span>
-    <button class="stepper-btn" onclick="setBpm(state.bpm+1)">+</button>
+    <button class="stepper-btn" onclick="setBpm(state.pattern.bpm+1)">+</button>
   </div>
   <div class="stepper">
     <span class="stepper-label">LEN</span>
@@ -164,6 +166,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   <button class="t-btn" onclick="clearAll()" title="Clear">🗑</button>
   <button class="t-btn" onclick="savePattern()" title="Save">💾</button>
   <button class="t-btn" onclick="loadPattern()" title="Load">📂</button>
+  <button class="t-btn t-btn-clock" id="clock-btn" onclick="toggleClockMode()">CLK</button>
   <button class="t-btn t-btn-play" id="play-btn" onclick="togglePlay()">▶</button>
 </div>
 
@@ -235,7 +238,12 @@ let state = {
   zoom:40, mode:'forward',
   outId:null, inId:null,
   midiAccess:null, midiConnected:false,
-  stepRef:0, dirRef:1, intervalId:null
+  stepRef:0, dirRef:1, intervalId:null,
+  // MIDI clock reception
+  clockMode:false,        // true = synced to external clock
+  clockPulse:0,           // pulse counter (0-23 per beat, step every 6)
+  clockLastTime:null,     // timestamp of last 0xF8 for BPM display
+  clockBpmBuf:[],         // rolling buffer of inter-pulse intervals
 };
 
 // Audio context for preview
@@ -308,6 +316,99 @@ function sendNoteOff(midi){
   if(out)out.send([0x80,midi,0]);
 }
 
+// ── MIDI Clock reception ──────────────────────────────────────────────────────
+function attachClockListener() {
+  if (!state.midiAccess || !state.inId) return;
+  const inp = state.midiAccess.inputs.get(state.inId);
+  if (!inp) return;
+  inp.onmidimessage = onMidiClockMessage;
+}
+
+function toggleClockMode() {
+  state.clockMode = !state.clockMode;
+  state.clockBpmBuf = [];
+  state.clockLastTime = null;
+  state.clockPulse = 0;
+  const btn = document.getElementById('clock-btn');
+  if (state.clockMode) {
+    btn.className = 't-btn t-btn-clock active';
+    flash('CLOCK · EXT ON');
+    // If already playing with internal clock, switch to waiting for ext clock
+    if (state.isPlaying && state.intervalId) {
+      clearInterval(state.intervalId);
+      state.intervalId = null;
+    }
+  } else {
+    btn.className = 't-btn t-btn-clock';
+    flash('CLOCK · INT');
+    // If playing, restart with internal clock
+    if (state.isPlaying && !state.intervalId) {
+      state.intervalId = setInterval(() => {
+        const len = Math.max(1, state.pattern.length);
+        state.stepRef = nextIndex(state.stepRef, len);
+        state.currentStep = state.stepRef;
+        playStep(state.stepRef);
+        renderStepHighlight();
+      }, stepIntervalMs());
+    }
+  }
+}
+
+function onMidiClockMessage(e) {
+  const status = e.data[0];
+
+  if (status === 0xF8) {             // ── Clock tick (24 PPQN) ──
+    const now = performance.now();
+    if (state.clockLastTime !== null) {
+      const interval = now - state.clockLastTime;
+      state.clockBpmBuf.push(interval);
+      if (state.clockBpmBuf.length > 12) state.clockBpmBuf.shift();
+      const avg = state.clockBpmBuf.reduce((a,b)=>a+b,0) / state.clockBpmBuf.length;
+      const bpm = Math.round(60000 / (avg * 24));
+      if (bpm >= 20 && bpm <= 300 && bpm !== state.pattern.bpm) {
+        state.pattern.bpm = bpm;
+        document.getElementById('bpm-val').textContent = bpm;
+      }
+    }
+    state.clockLastTime = now;
+
+    // Only drive sequencer if clock mode is ON
+    if (!state.clockMode || !state.isPlaying) return;
+    state.clockPulse = (state.clockPulse + 1) % 6;
+    if (state.clockPulse === 0) {
+      const len = Math.max(1, state.pattern.length);
+      state.stepRef = nextIndex(state.stepRef, len);
+      state.currentStep = state.stepRef;
+      playStep(state.stepRef);
+      renderStepHighlight();
+    }
+
+  } else if (status === 0xFA || status === 0xFB) {  // ── Start / Continue ──
+    if (!state.clockMode) return;
+    state.clockPulse = 0;
+    state.clockBpmBuf = [];
+    state.clockLastTime = null;
+    if (state.intervalId) { clearInterval(state.intervalId); state.intervalId = null; }
+    try { getAudio().resume(); } catch(ex) {}
+    state.stepRef = state.mode === 'reverse' ? state.pattern.length - 1 : 0;
+    state.dirRef = 1;
+    state.isPlaying = true;
+    state.currentStep = state.stepRef;
+    playStep(state.stepRef);
+    renderStepHighlight();
+    document.getElementById('play-btn').textContent = '■';
+    flash('CLOCK · START');
+
+  } else if (status === 0xFC) {                     // ── Stop ──
+    if (!state.clockMode) return;
+    state.isPlaying = false;
+    state.currentStep = -1;
+    renderStepHighlight();
+    document.getElementById('play-btn').textContent = '▶';
+    flash('CLOCK · STOP');
+  }
+}
+
 // Sequencer engine
 function stepIntervalMs(){return(60000/state.pattern.bpm)/4;}
 function nextIndex(cur,len){
@@ -343,13 +444,16 @@ function startSeq(){
   state.currentStep=state.stepRef;
   playStep(state.stepRef);
   renderStepHighlight();
-  state.intervalId=setInterval(()=>{
-    const len=Math.max(1,state.pattern.length);
-    state.stepRef=nextIndex(state.stepRef,len);
-    state.currentStep=state.stepRef;
-    playStep(state.stepRef);
-    renderStepHighlight();
-  },stepIntervalMs());
+  if (!state.clockMode) {
+    // Internal clock — drive with setInterval
+    state.intervalId=setInterval(()=>{
+      const len=Math.max(1,state.pattern.length);
+      state.stepRef=nextIndex(state.stepRef,len);
+      state.currentStep=state.stepRef;
+      playStep(state.stepRef);
+      renderStepHighlight();
+    },stepIntervalMs());
+  }
   document.getElementById('play-btn').textContent='■';
 }
 function stopSeq(){
@@ -406,7 +510,13 @@ function applyMode(m){
   }
   flash('MODE · '+m.toUpperCase());
 }
-function setBpm(n){state.pattern.bpm=Math.max(40,Math.min(240,n));document.getElementById('bpm-val').textContent=state.pattern.bpm;if(state.isPlaying){stopSeq();setTimeout(startSeq,50);}}
+function setBpm(n){
+  n=parseInt(n,10);
+  if(isNaN(n))return;
+  state.pattern.bpm=Math.max(40,Math.min(240,n));
+  document.getElementById('bpm-val').textContent=state.pattern.bpm;
+  if(state.isPlaying&&!state.clockMode){stopSeq();setTimeout(startSeq,50);}
+}
 function setLen(n){state.pattern.length=Math.max(1,Math.min(16,n));document.getElementById('len-val').textContent=state.pattern.length;document.getElementById('step-display').textContent=`— / ${state.pattern.length}`;renderSeq();}
 function setZoom(n){state.zoom=Math.max(28,Math.min(72,n));document.getElementById('zoom-val').textContent=state.zoom+'px';renderSeq();}
 function clearAll(){state.pattern.steps=Array.from({length:MAX_STEPS},blankStep);renderSeq();flash('Cleared');}
@@ -490,13 +600,17 @@ function patternToSysex() {
 
   // Rest bitmask (0x76-0x79): bitmask, bit=1 means RESTING, active steps clear bit
   // Layout: xxxx7654 xxxx3210 xxxxFEDC xxxxBA98
-  const REST_BYTE_MAP = [1, 0, 3, 2]; // steps 0-3→byte[1], 4-7→byte[0], 8-11→byte[3], 12-15→byte[2]
   let restBits = [0x0F, 0x0F, 0x0F, 0x0F];
   for (let i = 0; i < 16; i++) {
     if (p.steps[i].gate === 'on') {
-      const b   = REST_BYTE_MAP[Math.floor(i / 4)];
-      const bit = 3 - (i % 4);
-      restBits[b] &= ~(1 << bit);
+      const byteIdx = Math.floor(i / 4);
+      const bitIdx  = i % 4;
+      // bit position within nibble: step 0→bit0, step 1→bit1... but layout is inverted
+      // layout per spec: xxxx7654 xxxx3210 xxxxFEDC xxxxBA98
+      // byte0 nibble: steps 7,6,5,4; byte1 nibble: steps 3,2,1,0
+      // byte2 nibble: steps F,E,D,C; byte3 nibble: steps B,A,9,8
+      const stepInNibble = 3 - bitIdx; // bit3=first step in group
+      restBits[byteIdx] &= ~(1 << stepInNibble);
     }
   }
   msg.push(...restBits);
@@ -584,13 +698,12 @@ function fetchFromTD3() {
   let timeoutId = null;
   function onMsg(e) {
     const d = e.data;
-    // Check header: F0 00 20 32 00 01 0A 78
     if (d.length < 8) return;
     if (d[0] !== 0xF0) return;
     if (d[1]!==0x00||d[2]!==0x20||d[3]!==0x32||d[4]!==0x00||d[5]!==0x01||d[6]!==0x0A) return;
     if (d[7] !== 0x78) return;
     clearTimeout(timeoutId);
-    inp.onmidimessage = null;
+    inp.onmidimessage = onMidiClockMessage; // restore clock listener
     try {
       sysexToPattern(d);
       renderSeq();
@@ -601,7 +714,7 @@ function fetchFromTD3() {
 
   inp.onmidimessage = onMsg;
   timeoutId = setTimeout(() => {
-    inp.onmidimessage = null;
+    inp.onmidimessage = onMidiClockMessage; // restore clock listener on timeout
     flash('No reply from TD-3 (timeout)');
   }, 3000);
 
@@ -647,13 +760,22 @@ function renderDevicesModal(){
   const noneIn=document.createElement('button');
   noneIn.className='pill'+(!state.inId?' on':'');
   noneIn.textContent='NONE';
-  noneIn.onclick=()=>{state.inId=null;renderDevicesModal();};
+  noneIn.onclick=()=>{
+    // Remove clock listener from old input if any
+    if(state.inId && state.midiAccess){
+      const old=state.midiAccess.inputs.get(state.inId);
+      if(old) old.onmidimessage=null;
+    }
+    state.inId=null;
+    state.clockMode=false;
+    renderDevicesModal();
+  };
   iRow.appendChild(noneIn);
   inputs.forEach(i=>{
     const b=document.createElement('button');
     b.className='pill'+(state.inId===i.id?' on':'');
     b.textContent=i.name;
-    b.onclick=()=>{state.inId=i.id;renderDevicesModal();};
+    b.onclick=()=>{state.inId=i.id;attachClockListener();renderDevicesModal();};
     iRow.appendChild(b);
   });
   if(outputs.length===0){
