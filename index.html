@@ -1438,26 +1438,29 @@ function buildLfoRow(lfo){
 
   // ── TARGET SECTION ──
   const targSec=document.createElement('div');
-  targSec.className='lfo-section target';targSec.style.position='relative';
+  targSec.className='lfo-section target';
   const targLbl=document.createElement('div');targLbl.className='lfo-section-label';targLbl.textContent='TARGET';
-  const targBtn=document.createElement('button');
-  const tLabel=lfo.target!==null?LFO_TARGETS[lfo.target].label:'SELECT ▾';
-  targBtn.className='target-btn'+(lfo.target!==null?' has-target':'');
-  targBtn.textContent=tLabel;
-  // Target picker dropdown
-  const picker=document.createElement('div');picker.className='target-picker';picker.id=`lfo-picker-${lfo.id}`;
-  const pTitle=document.createElement('div');pTitle.className='target-picker-title';pTitle.textContent='PARAMETER';
-  picker.appendChild(pTitle);
+  // Use a real <select> — reliable, no z-index/overflow issues
+  const targSelect=document.createElement('select');
+  targSelect.style.cssText='background:#0a0d14;border:1px solid #1c2a3a;border-radius:5px;color:#6e7480;font-family:Courier New,monospace;font-size:10px;font-weight:800;padding:5px 8px;cursor:pointer;outline:none;width:100%;letter-spacing:1px;';
+  const defOpt=document.createElement('option');
+  defOpt.value='';defOpt.textContent='SELECT...';defOpt.disabled=true;
+  if(lfo.target===null) defOpt.selected=true;
+  targSelect.appendChild(defOpt);
   LFO_TARGETS.forEach((t,ti)=>{
-    const tp=document.createElement('div');
-    tp.className='target-pill'+(lfo.target===ti?' on':'');
-    tp.textContent=t.label;
-    tp.onclick=(e)=>{e.stopPropagation();lfo.target=ti;picker.classList.remove('open');renderLfoList();flash(`LFO ${lfo.id+1} → ${t.label} · CC${t.cc}`);};
-    picker.appendChild(tp);
+    const opt=document.createElement('option');
+    opt.value=ti;opt.textContent=t.label;
+    if(lfo.target===ti){opt.selected=true;targSelect.style.color='#3effb6';targSelect.style.borderColor='#3effb6';}
+    targSelect.appendChild(opt);
   });
-  targBtn.onclick=(e)=>{e.stopPropagation();picker.classList.toggle('open');};
-  document.addEventListener('click',()=>picker.classList.remove('open'),{once:true});
-  targSec.appendChild(targLbl);targSec.appendChild(targBtn);targSec.appendChild(picker);
+  targSelect.onchange=(e)=>{
+    const ti=parseInt(e.target.value);
+    lfo.target=ti;
+    targSelect.style.color='#3effb6';
+    targSelect.style.borderColor='#3effb6';
+    flash(`LFO ${lfo.id+1} → ${LFO_TARGETS[ti].label} · CC${LFO_TARGETS[ti].cc}`);
+  };
+  targSec.appendChild(targLbl);targSec.appendChild(targSelect);
 
   // ── KILL BTN ──
   const killBtn=document.createElement('button');
@@ -1506,6 +1509,11 @@ function removeLfo(id){
   renderLfoList();
   flash('LFO REMOVED');
 }
+
+// Close any open target pickers when clicking outside
+document.addEventListener('click',()=>{
+  document.querySelectorAll('.target-picker.open').forEach(p=>p.classList.remove('open'));
+});
 
 // Init
 renderSeq();
