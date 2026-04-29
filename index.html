@@ -947,75 +947,62 @@ function sendToTD3() {
   const out = state.midiAccess && state.midiAccess.outputs.get(state.outId);
   if (!out) { flash('Output not found'); return; }
 
-  // ── SIMPLE APPROACH: stream notes as timed MIDI so TD-3 records them live ──
-  // Put your TD-3 into WRITE mode first (hold WRITE/NEXT), then click this.
-  // We send: NoteOn → NoteOff for each active step, rests as a silent step-length gap.
-  // Accent = velocity 127, normal = velocity 100, rest = NoteOn C2 vel 1 (silent marker).
-  // Slide = overlapping notes (NoteOn before previous NoteOff).
+  // Button SysEx helper: A4 <btn> <state> — simulates pressing TD-3 physical buttons
+  // From 303patterns.com documentation
+  const btn = (id, on) => [0xF0, ...TD3_HDR, 0xA4, id, on ? 0x01 : 0x00, 0xF7];
 
-  const p = state.pattern;
-  const stepMs = (60000 / (state.pattern.bpm || 120)) / 4; // 16th note duration
-  const SLIDE_OVERLAP = 20; // ms of overlap for slide
+  const CLEAR      = 0x00; // LED green  — enters write mode / clears pattern
+  const WRITE_NEXT = 0x17; // LED yellow — advances step / confirms
 
-  let t = 0; // accumulated delay ms
-  let prevMidi = null;
-  let prevSlide = false;
+  const p       = state.pattern;
+  const stepMs  = (60000 / (p.bpm || 120)) / 4;
+  const GAP     = 80; // ms between button SysEx commands
 
-  flash('▶ Streaming to TD-3 — put it in WRITE mode now!');
+  // ── Phase 1: press Clear to enter write mode ──────────────────────────────
+  // Clear On → Clear Off → small gap → Write/Next On → Write/Next Off
+  // This puts the TD-3 into pitch-entry mode (LED yellow, step 1 ready)
+  let t = 0;
+
+  setTimeout(() => out.send(btn(CLEAR, true)),  t);          t += GAP;
+  setTimeout(() => out.send(btn(CLEAR, false)), t);          t += GAP;
+  setTimeout(() => out.send(btn(WRITE_NEXT, true)),  t);    t += GAP;
+  setTimeout(() => out.send(btn(WRITE_NEXT, false)), t);    t += GAP * 2;
+
+  flash('▶ Writing to TD-3...');
+
+  // ── Phase 2: stream each step as a note + Write/Next press ───────────────
+  // TD-3 pitch mode: NoteOn sets the pitch for current step,
+  // then Write/Next advances to next step.
+  // Accent = velocity ≥ accent threshold (default 100 in SynthTool)
+  // Slide  = press Slide button (0x14) before Write/Next
+  // Rest   = just press Write/Next without a note
 
   for (let i = 0; i < p.length; i++) {
-    const s = p.steps[i];
-    const midi = (BASE_OCTAVE + 1 + (s.octave || 0)) * 12 + (s.pitch || 0);
-    const vel  = s.accent ? 127 : 100;
+    const s    = p.steps[i];
     const gate = s.gate === 'on';
+    const midi = (BASE_OCTAVE + 1 + (s.octave || 0)) * 12 + (s.pitch || 0);
+    const vel  = s.accent ? 110 : 80;
 
     if (gate) {
-      // NoteOn at step start
-      const noteOnTime = t;
-      const noteOnMidi = midi;
-      const noteOnVel  = vel;
+      // Send note
+      setTimeout(() => out.send([0x90, midi, vel]), t);
+      t += GAP;
+      setTimeout(() => out.send([0x80, midi, 0]),   t);
+      t += GAP;
 
-      // If previous step had slide: send NoteOff for prev AFTER this NoteOn (legato)
-      if (prevMidi !== null && prevSlide) {
-        const prevOff = prevMidi;
-        setTimeout(() => out.send([0x80, prevOff, 0]), t + SLIDE_OVERLAP);
-      } else if (prevMidi !== null) {
-        // already sent NoteOff at end of prev step
-      }
-
-      setTimeout(() => out.send([0x90, noteOnMidi, noteOnVel]), noteOnTime);
-
-      // NoteOff: slide = hold into next step, normal = 72% gate
+      // If slide: press Slide button before advancing
       if (s.slide) {
-        // NoteOff deferred — handled at start of next step
-      } else {
-        setTimeout(() => out.send([0x80, noteOnMidi, 0]), t + stepMs * 0.72);
+        setTimeout(() => out.send(btn(0x14, true)),  t);  t += GAP;
+        setTimeout(() => out.send(btn(0x14, false)), t);  t += GAP;
       }
-
-      prevMidi  = midi;
-      prevSlide = s.slide;
-    } else {
-      // Rest: close previous note cleanly
-      if (prevMidi !== null && !prevSlide) {
-        // already closed
-      } else if (prevMidi !== null && prevSlide) {
-        const prevOff = prevMidi;
-        setTimeout(() => out.send([0x80, prevOff, 0]), t);
-      }
-      prevMidi  = null;
-      prevSlide = false;
     }
-
-    t += stepMs;
+    // Always press Write/Next to advance the step (rest or note)
+    setTimeout(() => out.send(btn(WRITE_NEXT, true)),  t);  t += GAP;
+    setTimeout(() => out.send(btn(WRITE_NEXT, false)), t);  t += GAP * 2;
   }
 
-  // Close any hanging note at the end
-  if (prevMidi !== null) {
-    setTimeout(() => out.send([0x80, prevMidi, 0]), t);
-  }
-
-  // Flash done after pattern finishes
-  setTimeout(() => flash(`✓ Done — ${p.length} steps sent`), t + 100);
+  // ── Phase 3: done ─────────────────────────────────────────────────────────
+  setTimeout(() => flash(`✓ Pattern written to TD-3 · ${p.length} steps`), t + 100);
 }
 
 function fetchFromTD3() {
