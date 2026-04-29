@@ -261,7 +261,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
   <button class="footer-btn" onclick="fetchFromTD3()">↓ FROM TD-3</button>
   <button class="footer-btn" onclick="sendToTD3()">↑ TO TD-3</button>
   <button class="footer-btn" id="lfo-toggle-btn" onclick="toggleLfoPanel()" style="border-color:#5cd0ff44;color:#9be4ff">◎ LFO</button>
-  <span class="footer-hint">FROM TD-3 requires Input+Output selected · SysEx via USB only</span>
+  <span class="footer-hint">TO TD-3: put TD-3 in WRITE mode first, then click ↑ · FROM TD-3 requires Input+Output + SysEx via USB</span>
 </div>
 
 </div>
@@ -945,17 +945,77 @@ function sysexToPattern(data) {
 function sendToTD3() {
   if (!state.outId) { flash('TD-3 not connected'); return; }
   const out = state.midiAccess && state.midiAccess.outputs.get(state.outId);
-  if (!out) { flash('TD-3 output not found'); return; }
-  try {
-    const sysex = patternToSysex();
-    // Web MIDI requires sysex:true in requestMIDIAccess — re-request if needed
-    if (!state.midiAccess.sysexEnabled) {
-      flash('Enable SysEx in MIDI permissions');
-      return;
+  if (!out) { flash('Output not found'); return; }
+
+  // ── SIMPLE APPROACH: stream notes as timed MIDI so TD-3 records them live ──
+  // Put your TD-3 into WRITE mode first (hold WRITE/NEXT), then click this.
+  // We send: NoteOn → NoteOff for each active step, rests as a silent step-length gap.
+  // Accent = velocity 127, normal = velocity 100, rest = NoteOn C2 vel 1 (silent marker).
+  // Slide = overlapping notes (NoteOn before previous NoteOff).
+
+  const p = state.pattern;
+  const stepMs = (60000 / (state.pattern.bpm || 120)) / 4; // 16th note duration
+  const SLIDE_OVERLAP = 20; // ms of overlap for slide
+
+  let t = 0; // accumulated delay ms
+  let prevMidi = null;
+  let prevSlide = false;
+
+  flash('▶ Streaming to TD-3 — put it in WRITE mode now!');
+
+  for (let i = 0; i < p.length; i++) {
+    const s = p.steps[i];
+    const midi = (BASE_OCTAVE + 1 + (s.octave || 0)) * 12 + (s.pitch || 0);
+    const vel  = s.accent ? 127 : 100;
+    const gate = s.gate === 'on';
+
+    if (gate) {
+      // NoteOn at step start
+      const noteOnTime = t;
+      const noteOnMidi = midi;
+      const noteOnVel  = vel;
+
+      // If previous step had slide: send NoteOff for prev AFTER this NoteOn (legato)
+      if (prevMidi !== null && prevSlide) {
+        const prevOff = prevMidi;
+        setTimeout(() => out.send([0x80, prevOff, 0]), t + SLIDE_OVERLAP);
+      } else if (prevMidi !== null) {
+        // already sent NoteOff at end of prev step
+      }
+
+      setTimeout(() => out.send([0x90, noteOnMidi, noteOnVel]), noteOnTime);
+
+      // NoteOff: slide = hold into next step, normal = 72% gate
+      if (s.slide) {
+        // NoteOff deferred — handled at start of next step
+      } else {
+        setTimeout(() => out.send([0x80, noteOnMidi, 0]), t + stepMs * 0.72);
+      }
+
+      prevMidi  = midi;
+      prevSlide = s.slide;
+    } else {
+      // Rest: close previous note cleanly
+      if (prevMidi !== null && !prevSlide) {
+        // already closed
+      } else if (prevMidi !== null && prevSlide) {
+        const prevOff = prevMidi;
+        setTimeout(() => out.send([0x80, prevOff, 0]), t);
+      }
+      prevMidi  = null;
+      prevSlide = false;
     }
-    out.send(sysex);
-    flash(`→ TD-3 G${state.group}·B${state.bank}·${state.section} saved`);
-  } catch(e) { flash('Send error: ' + e.message); }
+
+    t += stepMs;
+  }
+
+  // Close any hanging note at the end
+  if (prevMidi !== null) {
+    setTimeout(() => out.send([0x80, prevMidi, 0]), t);
+  }
+
+  // Flash done after pattern finishes
+  setTimeout(() => flash(`✓ Done — ${p.length} steps sent`), t + 100);
 }
 
 function fetchFromTD3() {
