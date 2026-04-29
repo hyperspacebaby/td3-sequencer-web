@@ -2,1964 +2,284 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TD-3 MIDI Sniffer</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#06070a;color:#cfd5dd;font-family:'Courier New',monospace;min-height:100vh;padding:10px}
-h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
-.root{display:flex;flex-direction:column;gap:8px;max-width:100%;overflow-x:hidden}
+body{background:#06070a;color:#cfd5dd;font-family:'Courier New',monospace;padding:16px;min-height:100vh}
+h1{font-size:14px;font-weight:900;letter-spacing:2px;color:#5cd0ff;margin-bottom:12px}
+.sub{font-size:10px;color:#4a5366;margin-bottom:16px;line-height:1.7}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+select{background:#0a0d14;border:1px solid #2b4258;border-radius:6px;color:#9be4ff;
+  font-family:'Courier New',monospace;font-size:11px;padding:7px 10px;outline:none;cursor:pointer}
+button{padding:7px 14px;border-radius:6px;font-family:'Courier New',monospace;
+  font-size:11px;font-weight:900;letter-spacing:1px;cursor:pointer;border:1px solid}
+.btn-connect{background:#0e1a26;border-color:#5cd0ff;color:#9be4ff}
+.btn-clear{background:#1a0c0c;border-color:#3a1c1c;color:#ff5b3e88}
+.btn-clear:hover{color:#ff5b3e;border-color:#ff5b3e}
+.status{font-size:10px;font-weight:900;letter-spacing:1.2px;padding:5px 12px;
+  border-radius:999px;border:1px solid #2b4258;color:#4a5366}
+.status.ok{border-color:#3effb6;color:#3effb6;background:#081a14}
+.status.err{border-color:#ff5b3e;color:#ff5b3e}
 
-/* METAL PANEL */
-.metal-panel{display:flex;align-items:center;gap:12px;background:linear-gradient(180deg,#cfd1d6 0%,#9ea1a8 50%,#7a7d83 100%);border-radius:14px;padding:10px 14px;border:1px solid #5a5d65;flex-wrap:wrap}
-.knob-outer{width:56px;height:56px;border-radius:50%;background:#0a0c10;border:3px solid #5cd0ff;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 14px #5cd0ff88}
-.knob-inner{width:42px;height:42px;border-radius:50%;background:#111418;border:1px solid #3a3f48;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
-.knob-notch{position:absolute;width:100%;height:100%;display:flex;align-items:flex-start;justify-content:center;padding-top:4px;transition:transform 0.3s}
-.knob-dot{width:4px;height:12px;background:#5cd0ff;border-radius:2px}
-.midi-fx-label{font-size:8px;font-weight:700;letter-spacing:1px;color:#1b1d22;position:relative}
-.mode-buttons{display:flex;gap:5px;flex-wrap:wrap}
-.mode-btn{padding:6px 9px;border-radius:6px;background:#0e1014;border:1px solid #2a2d34;font-family:'Courier New',monospace;font-size:9px;font-weight:700;letter-spacing:1.2px;color:#6e7480;cursor:pointer;transition:all 0.15s}
-.mode-btn.active{border-color:#5cd0ff;background:#0e1a26;color:#9be4ff;box-shadow:0 0 6px #5cd0ff88}
-.metal-spacer{flex:1}
-.status-col{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
-.midi-badge{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;cursor:pointer;border:1px solid #3a3f48;background:#1a1d22;font-size:9px;font-weight:700;letter-spacing:1px;color:#cfd5dd}
-.midi-badge.connected{background:#0e2a1d;border-color:#3effb6;color:#3effb6}
-.midi-dot{width:7px;height:7px;border-radius:50%;background:#ffae3e}
-.midi-dot.on{background:#3effb6}
-.slot-chip{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:6px;background:#0a1420;border:1px solid #2b4258;font-size:10px;font-weight:800;letter-spacing:1.2px;color:#9ad7ff;cursor:pointer}
+/* Instructions */
+.instr{background:#090c12;border:1px solid #1c2a40;border-radius:10px;padding:12px 14px;margin-bottom:14px}
+.instr-title{font-size:9px;font-weight:900;letter-spacing:2px;color:#5cd0ff;margin-bottom:8px}
+.step-list{list-style:none;display:flex;flex-direction:column;gap:5px}
+.step-list li{font-size:10px;color:#7a8496;line-height:1.5}
+.step-list li span{color:#9be4ff;font-weight:700}
 
-/* TRANSPORT */
-.transport{display:flex;align-items:center;gap:8px;background:#0c0f15;border-radius:10px;padding:8px 10px;border:1px solid #1c2230;flex-wrap:wrap}
-.brand{display:flex;align-items:center;gap:7px}
-.brand-dot{width:9px;height:9px;border-radius:50%;background:#ff5b3e;box-shadow:0 0 8px #ff5b3ecc}
-.brand-text{font-size:12px;font-weight:900;letter-spacing:2px;color:#cfd5dd}
-.stepper{display:flex;align-items:center;gap:5px;background:#080a0f;border-radius:6px;padding:4px 8px;border:1px solid #1c2230}
-.stepper-label{font-size:8px;font-weight:800;letter-spacing:1.2px;color:#5a6170}
-.stepper-btn{width:22px;height:22px;border-radius:4px;background:#0e1420;border:1px solid #1f2a3a;color:#9ad7ff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;font-family:'Courier New',monospace;line-height:1}
-.stepper-btn:hover{background:#142030}
-.stepper-value{font-size:12px;font-weight:800;min-width:32px;text-align:center;color:#cfe9ff;font-variant-numeric:tabular-nums}
-.step-counter{display:flex;align-items:center;gap:7px;padding:4px 10px;border-radius:6px;background:#0a1420;border:1px solid #2b4258}
-.step-counter-label{font-size:8px;font-weight:800;letter-spacing:1.2px;color:#5a6170}
-.step-counter-value{font-size:12px;font-weight:900;color:#9be4ff;font-variant-numeric:tabular-nums}
-.t-spacer{flex:1}
-.t-btn{width:36px;height:32px;border-radius:6px;background:#0e1420;border:1px solid #2b4258;color:#9ad7ff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center}
-.t-btn:hover{background:#142030}
-.t-btn-play{background:#9be4ff;border-color:#5cd0ff;color:#08111c;box-shadow:0 0 8px #5cd0ff88}
-.t-btn-play:hover{background:#b0ecff}
-.t-btn-clock{background:#0e1420;border-color:#2b4258;color:#5a6170;font-size:9px;font-weight:900;letter-spacing:1px}
-.t-btn-clock.active{background:#0e2a1d;border-color:#3effb6;color:#3effb6;box-shadow:0 0 6px #3effb688}
+/* Log */
+.log-wrap{background:#04050a;border:1px solid #1c2230;border-radius:10px;
+  padding:10px;height:420px;overflow-y:auto;font-size:11px;line-height:1.6}
+.log-entry{display:flex;gap:10px;padding:3px 0;border-bottom:1px solid #0d1020}
+.log-entry:last-child{border-bottom:none}
+.log-ts{color:#3a4460;min-width:72px;flex-shrink:0}
+.log-hex{color:#9be4ff;min-width:100px;flex-shrink:0;font-weight:700;letter-spacing:1px}
+.log-dec{color:#5a6a80;min-width:90px;flex-shrink:0}
+.log-label{color:#cfd5dd;flex:1}
+.log-label.NOTE{color:#3effb6;font-weight:700}
+.log-label.TIE{color:#ffb04a;font-weight:700}
+.log-label.REST{color:#ff5b3e;font-weight:700}
+.log-label.STEP{color:#3effb6;font-weight:700}
+.log-label.release{color:#3a4460}
+.empty{color:#2a3444;font-size:11px;padding:20px;text-align:center}
 
-/* SEQ SCROLL */
-.seq-wrap{background:#080a10;border-radius:12px;border:1px solid #1c2230;padding:8px;overflow-x:auto;overflow-y:visible}
-.seq-inner{display:inline-flex;flex-direction:column;gap:0;overflow:visible}
-.step-num-row{display:flex;margin-bottom:4px}
-.step-num-spacer{width:44px;flex-shrink:0}
-.step-num-cell{height:18px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#4a5366;flex-shrink:0}
-.step-num-cell.active{color:#9be4ff}
-.step-num-cell.beyond{opacity:0.25}
-.roll-row{display:flex;margin-bottom:2px;overflow:visible}
-.row-label{width:44px;height:24px;padding-left:8px;display:flex;align-items:center;background:#0c1018;border-right:1px solid #161c28;border-radius:4px;margin-right:4px;flex-shrink:0}
-.row-label.black{background:#070910}
-.row-label.is-c{background:#101826}
-.row-label-text{font-size:10px;font-weight:700;letter-spacing:1px;color:#6c7588}
-.row-label.is-c .row-label-text{color:#9be4ff}
-.cell{height:24px;margin-right:2px;border-radius:3px;background:#10141d;border:1px solid #171d28;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:background 0.1s,border-color 0.1s}
-.cell.black{background:#0a0d14}
-.cell.beat{border-color:#1e2738}
-.cell.beyond{opacity:0.25}
-.cell.playhead{border-color:#5cd0ff;background:#101e2c}
-.cell.lit{background:#dbe8f3;border-color:#cfe9ff}
-.cell.lit.accent{background:#fff;border-color:#fff}
-.cell-inner{width:65%;height:55%;border-radius:2px;background:#9be4ff;display:none}
-.cell.lit .cell-inner{display:block}
-.cell.lit.accent .cell-inner{background:#fff}
-/* Multi-step note bar — grid stays 100% aligned, visual merge via box-shadow */
-/* Head: lit normally, but extend a shadow rightward to cover the 2px gap */
-.cell.note-head{background:#dbe8f3;border-color:#cfe9ff;border-radius:3px;
-  box-shadow:2px 0 0 0 #dbe8f3;}
-.cell.note-head.accent{background:#fff;border-color:#fff;box-shadow:2px 0 0 0 #fff;}
-/* Body: fill the whole cell + extend shadow right, hide left edge via shadow from prev */
-.cell.note-body{background:#cce0f0;border-color:#cce0f0;border-radius:0;
-  box-shadow:-2px 0 0 0 #cce0f0, 2px 0 0 0 #cce0f0;}
-.cell.note-body.accent{background:#eef0ff;border-color:#eef0ff;
-  box-shadow:-2px 0 0 0 #eef0ff, 2px 0 0 0 #eef0ff;}
-/* Tail: fill cell, close off on the right, hide left edge */
-.cell.note-tail{background:#cce0f0;border-color:#cce0f0;border-radius:3px;
-  box-shadow:-2px 0 0 0 #cce0f0;}
-.cell.note-tail.accent{background:#eef0ff;border-color:#eef0ff;
-  box-shadow:-2px 0 0 0 #eef0ff;}
-/* Suppress dot on body/tail */
-.cell.note-body .cell-inner,.cell.note-tail .cell-inner{display:none}
-
-/* LANES */
-.lane-row{display:flex;margin-top:4px}
-.lane-label-cell{background:#0e1a26;border:1px solid #2b4258;height:30px}
-.lane-label-text{font-size:9px;font-weight:900;letter-spacing:1.4px;color:#9be4ff}
-.lane-cell{height:30px;margin-right:2px;border-radius:4px;background:#10141d;border:1px solid #1f2738;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
-.lane-cell:hover{background:#141820}
-.lane-dot{width:4px;height:4px;border-radius:50%;background:#2c3849}
-.accent-dot{width:16px;height:16px;border-radius:50%;background:#0a0d14;border:1.5px solid #3a4660}
-.accent-dot.on{background:#5cd0ff;border-color:#9be4ff;box-shadow:0 0 8px #5cd0ff}
-.slide-dot{width:18px;height:18px;border-radius:50%;background:#0a0d14;border:1.5px solid #3a4660;display:flex;align-items:center;justify-content:center;font-size:13px;color:#3a4660;line-height:1}
-.slide-dot.on{background:#0d1e2e;border-color:#7ac8ff;color:#9be4ff;box-shadow:0 0 7px #9be4ff88}
-.oct-up{color:#7ad0ff;font-size:14px}
-.oct-down{color:#ffb04a;font-size:14px}
-
-
-/* FOOTER */
-.footer{display:flex;align-items:center;gap:8px;padding:4px}
-.footer-btn{display:flex;align-items:center;gap:6px;padding:7px 12px;border-radius:6px;background:#0a1420;border:1px solid #2b4258;color:#9ad7ff;font-family:'Courier New',monospace;font-size:10px;font-weight:800;letter-spacing:1.2px;cursor:pointer}
-.footer-btn:hover{background:#0e1a30}
-.footer-hint{color:#3f4858;font-size:9px;font-style:italic;flex:1;text-align:right}
-
-/* TOAST */
-.toast{position:fixed;top:12px;left:50%;transform:translateX(-50%);padding:8px 16px;border-radius:999px;background:#0a1420;border:1px solid #2b4258;color:#9be4ff;font-size:11px;font-weight:800;letter-spacing:1px;pointer-events:none;z-index:999;display:none}
-
-/* MODAL */
-.modal-backdrop{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);display:none;align-items:center;justify-content:center;z-index:100;padding:20px}
-.modal-backdrop.open{display:flex}
-.modal-card{background:#0c1018;border-radius:14px;border:1px solid #1c2230;padding:18px;min-width:280px;max-width:500px;width:100%}
-.modal-title{color:#9be4ff;font-size:16px;font-weight:900;letter-spacing:1.4px;margin-bottom:4px}
-.modal-sub{color:#5a6170;font-size:11px;margin-bottom:12px;line-height:1.5}
-.modal-label{color:#5a6170;font-size:10px;font-weight:800;letter-spacing:1.4px;margin-top:12px;margin-bottom:6px}
-.modal-row{display:flex;flex-wrap:wrap;gap:6px}
-.pill{padding:7px 13px;border-radius:6px;background:#0e1420;border:1px solid #1f2a3a;color:#6e7480;font-family:'Courier New',monospace;font-size:12px;font-weight:800;cursor:pointer}
-.pill:hover{background:#121a28}
-.pill.on{background:#0e1a26;border-color:#5cd0ff;color:#9be4ff}
-.close-btn{padding:7px 14px;border-radius:6px;background:#9be4ff;border:none;color:#08111c;font-family:'Courier New',monospace;font-size:11px;font-weight:900;letter-spacing:1.2px;cursor:pointer;margin-top:18px}
-.midi-info{color:#5a6170;font-size:10px;line-height:1.6;margin-top:8px;padding:8px;background:#080a0f;border-radius:6px;border:1px solid #1c2230}
-
-/* LFO PANEL */
-.lfo-panel{background:#090c12;border-radius:12px;border:1px solid #1c2a40;padding:10px 12px;display:none;flex-direction:column;gap:8px}
-.lfo-panel.open{display:flex}
-.lfo-panel-header{display:flex;align-items:center;gap:8px;margin-bottom:2px}
-.lfo-panel-title{font-size:9px;font-weight:900;letter-spacing:2px;color:#5cd0ff;flex:1}
-.lfo-close-btn{width:22px;height:22px;border-radius:4px;background:#0a1420;border:1px solid #1c2a40;color:#5a6170;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;font-family:'Courier New',monospace}
-.lfo-close-btn:hover{color:#9be4ff;border-color:#2b4258}
-.lfo-list{display:flex;flex-direction:column;gap:6px}
-.lfo-row{display:flex;align-items:stretch;gap:0;border-radius:8px;overflow:hidden;border:1px solid #1c2a40;background:#0c1018;position:relative}
-.lfo-row.lfo-active{border-color:#5cd0ff44}
-.lfo-section{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 10px;gap:5px;border-right:1px solid #1c2a40;min-width:0}
-.lfo-section:last-child{border-right:none}
-.lfo-section-label{font-size:7px;font-weight:900;letter-spacing:1.8px;color:#3d4f68;text-align:center}
-/* Wave section */
-.lfo-section.wave{flex:0 0 auto;min-width:110px}
-.wave-btns{display:flex;gap:4px}
-.wave-btn{width:30px;height:28px;border-radius:5px;background:#0a0d14;border:1px solid #1c2a3a;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.12s;padding:0}
-.wave-btn svg{display:block}
-.wave-btn.on{background:#0c1c30;border-color:#5cd0ff;box-shadow:0 0 6px #5cd0ff55}
-.wave-btn.on svg path,.wave-btn.on svg rect,.wave-btn.on svg polyline,.wave-btn.on svg line{stroke:#9be4ff}
-/* Rate section */
-.lfo-section.rate{flex:1;min-width:120px}
-.rate-mode-toggle{display:flex;gap:3px;margin-bottom:2px}
-.rate-mode-btn{padding:3px 8px;border-radius:4px;background:#0a0d14;border:1px solid #1c2a3a;font-family:'Courier New',monospace;font-size:8px;font-weight:800;letter-spacing:1px;color:#3d4f68;cursor:pointer;transition:all 0.12s}
-.rate-mode-btn.on{background:#0c1c30;border-color:#5cd0ff;color:#9be4ff}
-.rate-bpm-row{display:flex;align-items:center;gap:5px}
-.rate-stepper-btn{width:20px;height:20px;border-radius:3px;background:#0e1420;border:1px solid #1f2a3a;color:#9ad7ff;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;font-family:'Courier New',monospace;line-height:1}
-.rate-stepper-btn:hover{background:#142030}
-.rate-val{font-size:11px;font-weight:800;min-width:36px;text-align:center;color:#cfe9ff;font-variant-numeric:tabular-nums}
-.rate-knob-wrap{position:relative;width:36px;height:36px;cursor:pointer}
-.rate-knob-outer{width:36px;height:36px;border-radius:50%;background:#0a0c10;border:2px solid #5cd0ff;display:flex;align-items:center;justify-content:center;box-shadow:0 0 8px #5cd0ff66}
-.rate-knob-inner{width:26px;height:26px;border-radius:50%;background:#111418;border:1px solid #2a3040;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
-.rate-knob-notch{position:absolute;width:100%;height:100%;display:flex;align-items:flex-start;justify-content:center;padding-top:3px}
-.rate-knob-dot{width:3px;height:8px;background:#5cd0ff;border-radius:2px}
-/* Target section */
-.lfo-section.target{flex:0 0 auto;min-width:100px}
-.target-btn{padding:5px 10px;border-radius:5px;background:#0a0d14;border:1px solid #1c2a3a;color:#5a6a80;font-family:'Courier New',monospace;font-size:8px;font-weight:800;letter-spacing:1px;cursor:pointer;text-align:center;transition:all 0.12s;white-space:nowrap}
-.target-btn:hover{background:#0d1520;border-color:#2b4258}
-.target-btn.has-target{border-color:#3effb6;color:#3effb6;background:#081a14}
-/* LFO viz */
-.lfo-viz{height:28px;border-radius:3px;overflow:hidden;background:#060810;border:1px solid #10162a;position:relative}
-.lfo-viz svg{display:block;width:100%;height:100%}
-/* Kill btn */
-.lfo-kill-btn{position:absolute;top:5px;right:5px;width:16px;height:16px;border-radius:3px;background:#1a0c0c;border:1px solid #3a1c1c;color:#ff5b3e88;cursor:pointer;font-size:9px;display:flex;align-items:center;justify-content:center;font-family:'Courier New',monospace;opacity:0;transition:opacity 0.15s}
-.lfo-row:hover .lfo-kill-btn{opacity:1}
-.lfo-kill-btn:hover{color:#ff5b3e;border-color:#ff5b3e88}
-/* Add LFO button */
-.lfo-add-btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:7px;border-radius:7px;background:#0a0d14;border:1px dashed #1c2a40;color:#3d4f68;font-family:'Courier New',monospace;font-size:9px;font-weight:800;letter-spacing:1.4px;cursor:pointer;transition:all 0.15s}
-.lfo-add-btn:hover{border-color:#5cd0ff55;color:#5cd0ff;background:#0a1420}
-.lfo-add-btn.maxed{opacity:0.3;cursor:not-allowed;pointer-events:none}
-/* Target picker modal */
-.target-picker{position:absolute;bottom:calc(100% + 6px);right:0;background:#0c1018;border:1px solid #2b4258;border-radius:8px;padding:8px;display:none;flex-direction:column;gap:4px;z-index:200;min-width:140px;box-shadow:0 4px 24px #00000088}
-.target-picker.open{display:flex}
-.target-picker-title{font-size:7px;font-weight:900;letter-spacing:1.8px;color:#3d4f68;margin-bottom:2px}
-.target-pill{padding:5px 10px;border-radius:5px;background:#0e1420;border:1px solid #1f2a3a;color:#6e7480;font-family:'Courier New',monospace;font-size:10px;font-weight:800;cursor:pointer;transition:all 0.12s}
-.target-pill:hover{background:#121a28;color:#9be4ff}
-.target-pill.on{background:#0e1a26;border-color:#5cd0ff;color:#9be4ff}
+/* Capture table */
+.capture-box{background:#080c14;border:1px solid #1c2a40;border-radius:10px;
+  padding:12px 14px;margin-top:12px}
+.capture-title{font-size:9px;font-weight:900;letter-spacing:2px;color:#ffb04a;margin-bottom:8px}
+.capture-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.cap-cell{background:#0a0d14;border:1px solid #1c2230;border-radius:6px;padding:8px 10px}
+.cap-cell-label{font-size:8px;font-weight:900;letter-spacing:1.4px;color:#3d4f68;margin-bottom:4px}
+.cap-cell-val{font-size:13px;font-weight:900;color:#4a5366;letter-spacing:1px}
+.cap-cell-val.set{color:#9be4ff}
+.cap-cell-val.NOTE{color:#3effb6}
+.cap-cell-val.TIE{color:#ffb04a}
+.cap-cell-val.REST{color:#ff5b3e}
 </style>
 </head>
 <body>
-<h2 class="sr-only">TD-3 Sequencer Pro — 16-step acid bass sequencer with Web MIDI output</h2>
-<div class="root" id="app">
+<h1>⚡ TD-3 MIDI SNIFFER</h1>
+<p class="sub">Connect your TD-3 as INPUT · press buttons on the hardware · see the exact raw bytes here.</p>
 
-<!-- METAL PANEL -->
-<div class="metal-panel">
-  <div class="knob-outer"><div class="knob-inner"><div class="knob-notch" id="knob-notch"><div class="knob-dot"></div></div></div></div>
-  <span class="midi-fx-label">MIDI FX</span>
-  <div class="mode-buttons">
-    <button class="mode-btn active" id="btn-forward" data-mode="forward" onclick="applyMode('forward')">▶ FWD</button>
-    <button class="mode-btn" id="btn-bounce" data-mode="bounce" onclick="applyMode('bounce')">⇄ BOUNCE</button>
-    <button class="mode-btn" id="btn-invert" data-mode="invert" onclick="applyMode('invert')">INVERT</button>
-    <button class="mode-btn" id="btn-random" data-mode="random" onclick="applyMode('random')">RANDOM</button>
-    <button class="mode-btn" id="btn-reverse" data-mode="reverse" onclick="applyMode('reverse')">REVERSE</button>
-    <button class="mode-btn" id="btn-weave" data-mode="weave" onclick="applyMode('weave')">WEAVE</button>
-    <button class="mode-btn" id="btn-octflip" data-mode="octflip" onclick="applyMode('octflip')">OCT FLIP</button>
-  </div>
-  <div class="metal-spacer"></div>
-  <div class="status-col">
-    <div class="midi-badge" id="midi-badge" onclick="openModal('devices')">
-      <div class="midi-dot" id="midi-dot"></div>
-      <span id="midi-badge-text">MIDI · NO DEVICE</span>
+<div class="instr">
+  <div class="instr-title">HOW TO USE</div>
+  <ol class="step-list">
+    <li><span>1.</span> Select your TD-3 from the INPUT dropdown below and click CONNECT</li>
+    <li><span>2.</span> Put the TD-3 into <span>TIME MODE</span> (press TIME MODE button, LED blinks)</li>
+    <li><span>3.</span> Press the <span>NOTE</span> button (Step key) once → read the hex</li>
+    <li><span>4.</span> Press TIME MODE again to reset, then press <span>TIE</span> (Write/Next) → read the hex</li>
+    <li><span>5.</span> Press TIME MODE again, press <span>REST</span> (Back) → read the hex</li>
+    <li><span>6.</span> The "CAPTURED" box below auto-fills — share those 3 bytes with Claude</li>
+  </ol>
+</div>
+
+<div class="row">
+  <select id="input-select"><option value="">— select MIDI input —</option></select>
+  <button class="btn-connect" onclick="connectInput()">CONNECT</button>
+  <span class="status" id="status">NOT CONNECTED</span>
+  <button class="btn-clear" onclick="clearLog()">CLEAR LOG</button>
+</div>
+
+<div class="log-wrap" id="log">
+  <div class="empty">waiting for MIDI input…</div>
+</div>
+
+<!-- Captured bytes summary -->
+<div class="capture-box">
+  <div class="capture-title">⬇ CAPTURED — press each button once to fill these in</div>
+  <div class="capture-grid">
+    <div class="cap-cell">
+      <div class="cap-cell-label">NOTE (Step key)</div>
+      <div class="cap-cell-val NOTE" id="cap-note">—</div>
     </div>
-    <div class="slot-chip" onclick="openModal('patterns')">
-      <span id="slot-text">G1 · B1 · A</span>
-      <span style="color:#9ad7ff;font-size:10px">▾</span>
+    <div class="cap-cell">
+      <div class="cap-cell-label">TIE (Write/Next)</div>
+      <div class="cap-cell-val TIE" id="cap-tie">—</div>
     </div>
-  </div>
-</div>
-
-<!-- TRANSPORT -->
-<div class="transport">
-  <div class="brand"><div class="brand-dot"></div><span class="brand-text">TD3.SEQ</span></div>
-  <div class="stepper">
-    <span class="stepper-label">BPM</span>
-    <button class="stepper-btn" onclick="setBpm(state.pattern.bpm-1)">−</button>
-    <span class="stepper-value" id="bpm-val">120</span>
-    <button class="stepper-btn" onclick="setBpm(state.pattern.bpm+1)">+</button>
-  </div>
-  <div class="stepper">
-    <span class="stepper-label">LEN</span>
-    <button class="stepper-btn" onclick="setLen(state.pattern.length-1)">−</button>
-    <span class="stepper-value" id="len-val">16</span>
-    <button class="stepper-btn" onclick="setLen(state.pattern.length+1)">+</button>
-  </div>
-  <div class="stepper">
-    <span class="stepper-label">ZOOM</span>
-    <button class="stepper-btn" onclick="setZoom(state.zoom-6)">−</button>
-    <span class="stepper-value" id="zoom-val">40px</span>
-    <button class="stepper-btn" onclick="setZoom(state.zoom+6)">+</button>
-  </div>
-  <div class="stepper">
-    <span class="stepper-label">SLIDE</span>
-    <button class="stepper-btn" onclick="setSlide(state.slideTime-5)">−</button>
-    <span class="stepper-value" id="slide-val">64</span>
-    <button class="stepper-btn" onclick="setSlide(state.slideTime+5)">+</button>
-  </div>
-  <div class="stepper">
-    <span class="stepper-label">SWING</span>
-    <button class="stepper-btn" onclick="setSwing(state.pattern.swing-2)">−</button>
-    <span class="stepper-value" id="swing-val">0%</span>
-    <button class="stepper-btn" onclick="setSwing(state.pattern.swing+2)">+</button>
-  </div>
-  <div class="step-counter">
-    <span class="step-counter-label">STEP</span>
-    <span class="step-counter-value" id="step-display">— / 16</span>
-  </div>
-  <div class="t-spacer"></div>
-  <button class="t-btn" onclick="clearAll()" title="Clear">🗑</button>
-  <button class="t-btn" onclick="savePattern()" title="Save">💾</button>
-  <button class="t-btn" onclick="loadPattern()" title="Load">📂</button>
-  <button class="t-btn t-btn-clock" id="clock-btn" onclick="toggleClockMode()">CLK</button>
-  <button class="t-btn t-btn-play" id="play-btn" onclick="togglePlay()">▶</button>
-</div>
-
-<!-- SEQUENCER -->
-<div class="seq-wrap">
-  <div class="seq-inner" id="seq-inner"></div>
-</div>
-
-<!-- LFO PANEL -->
-<div class="lfo-panel" id="lfo-panel">
-  <div class="lfo-panel-header">
-    <span class="lfo-panel-title">⋯ LFO ENGINE</span>
-    <button class="lfo-close-btn" onclick="closeLfoPanel()">✕</button>
-  </div>
-  <div class="lfo-list" id="lfo-list"></div>
-  <button class="lfo-add-btn" id="lfo-add-btn" onclick="addLfo()">+ ADD LFO</button>
-</div>
-
-<!-- SEND STATUS BAR -->
-<div id="send-bar" style="display:none;align-items:center;gap:10px;padding:6px 10px;background:#080c14;border-radius:8px;border:1px solid #1c2a40">
-  <span id="send-label" style="font-size:9px;font-weight:900;letter-spacing:1.6px;color:#9be4ff;min-width:110px"></span>
-  <div style="flex:1;height:5px;background:#0c1018;border-radius:3px;overflow:hidden">
-    <div id="send-progress" style="height:100%;background:linear-gradient(90deg,#5cd0ff,#3effb6);border-radius:3px;width:0%;transition:width 0.1s linear"></div>
-  </div>
-  <span id="send-step" style="font-size:10px;font-weight:900;color:#5cd0ff;min-width:44px;text-align:right;font-variant-numeric:tabular-nums"></span>
-  <button onclick="cancelSend()" style="padding:3px 10px;border-radius:5px;background:#1a0c0c;border:1px solid #3a1c1c;color:#ff5b3e;font-family:'Courier New',monospace;font-size:9px;font-weight:900;letter-spacing:1px;cursor:pointer">✕ CANCEL</button>
-</div>
-
-<!-- FOOTER -->
-<div class="footer">
-  <button class="footer-btn" onclick="fetchFromTD3()">↓ FROM TD-3</button>
-  <button class="footer-btn" id="pitch-to-td-btn" onclick="pitchToTD3()">♩ PITCH TO TD</button>
-  <button class="footer-btn" id="time-to-td-btn" onclick="timeToTD3()">♟ PATTERN TO TD</button>
-  <button class="footer-btn" id="lfo-toggle-btn" onclick="toggleLfoPanel()" style="border-color:#5cd0ff44;color:#9be4ff">◎ LFO</button>
-  <span class="footer-hint">① PAT WRITE + USB clock → PATTERN TO TD  · ② PITCH MODE on HW → PITCH TO TD</span>
-</div>
-
-</div>
-
-<!-- TOAST -->
-<div class="toast" id="toast"></div>
-
-<!-- DEVICES MODAL -->
-<div class="modal-backdrop" id="modal-devices" onclick="closeModal('devices')">
-  <div class="modal-card" onclick="event.stopPropagation()">
-    <div class="modal-title">MIDI Devices</div>
-    <div class="modal-sub" id="devices-sub">Connect your TD-3 via USB MIDI adapter or Bluetooth MIDI</div>
-    <div class="modal-label">OUTPUT (to TD-3)</div>
-    <div class="modal-row" id="outputs-row"></div>
-    <div class="modal-label">INPUT (from TD-3)</div>
-    <div class="modal-row" id="inputs-row"></div>
-    <div class="midi-info" id="midi-info">Web MIDI API — works in Chrome/Edge on desktop. On iOS, use a Web MIDI browser app (e.g. "Web MIDI Browser" from App Store). Connect your Behringer TD-3 via USB-MIDI adapter or Bluetooth MIDI.</div>
-    <button class="close-btn" onclick="closeModal('devices')">DONE</button>
-  </div>
-</div>
-
-<!-- PATTERNS MODAL -->
-<div class="modal-backdrop" id="modal-patterns" onclick="closeModal('patterns')">
-  <div class="modal-card" onclick="event.stopPropagation()">
-    <div class="modal-title">Pattern Slot</div>
-    <div class="modal-sub">Behringer TD-3 layout · 4 groups × 8 banks × A/B</div>
-    <div class="modal-label">GROUP</div>
-    <div class="modal-row" id="groups-row"></div>
-    <div class="modal-label">BANK</div>
-    <div class="modal-row" id="banks-row"></div>
-    <div class="modal-label">SECTION</div>
-    <div class="modal-row" id="sections-row"></div>
-    <button class="close-btn" onclick="closeModal('patterns')">DONE</button>
+    <div class="cap-cell">
+      <div class="cap-cell-label">REST (Back)</div>
+      <div class="cap-cell-val REST" id="cap-rest">—</div>
+    </div>
   </div>
 </div>
 
 <script>
-const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-const ROW_PITCHES = [12,11,10,9,8,7,6,5,4,3,2,1,0];
-const ROW_LABELS = ROW_PITCHES.map(p=>NOTE_NAMES[p%12]+(p===12?'↑':''));
-const BASE_OCTAVE = 3;
-const MAX_STEPS = 16;
-const GROUPS = [1,2,3,4];
-const BANKS = ['1','2','3','4','5','6','7','8'];
-const SECTIONS = ['A','B'];
-const KNOB_ANGLES = {forward:-45,bounce:0,reverse:45,random:135,invert:-135};
+let midiAccess = null;
+let activeInput = null;
+let logEntries = [];
+let startTime = performance.now();
 
-// gate: 'on' = NOTE, 'tie' = TIE (extend prev note), 'rest' = REST (silence)
-const blankStep = ()=>({pitch:0,gate:'rest',octave:0,accent:false,slide:false});
-const blankPattern = ()=>({steps:Array.from({length:MAX_STEPS},blankStep),length:16,bpm:120,swing:0});
-const slotKey=(g,b,s)=>`td3.pattern.${g}.${b}.${s}`;
-
-let state = {
-  pattern: blankPattern(),
-  group:1, bank:'1', section:'A',
-  isPlaying:false, currentStep:-1,
-  zoom:40, mode:'forward',
-  outId:null, inId:null,
-  midiAccess:null, midiConnected:false,
-  stepRef:0, dirRef:1, intervalId:null,
-  invertPhase:0,
-  slideTime: 64,          // CC#5 Portamento Time sent to TD-3 (0-127)
-  // MIDI clock reception
-  clockMode:false,
-  clockPulse:0,
-  clockLastTime:null,
-  clockBpmBuf:[],
+// Known button map from 303patterns.com test mode dump (original TD-3)
+const KNOWN = {
+  0x00:'CLEAR',    0x01:'START/STOP', 0x02:'PITCH MODE',
+  0x03:'BAR',      0x04:'C0',   0x05:'C#', 0x06:'D',  0x07:'D#',
+  0x08:'E',        0x09:'F',    0x0A:'F#', 0x0B:'G',  0x0C:'G#',
+  0x0D:'A',        0x0E:'A#',   0x0F:'B',  0x10:'C1',
+  0x11:'STEP / NOTE',   0x12:'TRIPLET', 0x13:'PATTERN A',
+  0x14:'SLIDE',    0x15:'PATTERN B',
+  0x16:'BACK / REST',   0x17:'WRITE-NEXT / TIE',
 };
 
-// Audio context for preview
-let audioCtx = null;
-function getAudio(){if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)();return audioCtx;}
-
-// Persistent audio nodes so slide can carry envelope across steps
-let _osc = null, _filt = null, _gain = null, _prevMidi = null;
-
-function triggerNote(midi, dur, accent, slide){
-  try{
-    const ctx = getAudio();
-    const t   = ctx.currentTime;
-    const targetFreq = 440 * Math.pow(2, (midi - 69) / 12);
-    // Slide gate: ~1.9 steps — sound carries fully through the destination step
-    // Normal gate: staccato at 72% of step
-    const gateSec = slide ? (dur * 1.9) / 1000 : dur / 1000 * 0.72;
-
-    if(slide && _osc && _prevMidi !== null){
-      // ── SLIDE: keep oscillator alive, glide pitch exponentially ──────────
-      // Real 303: exponential RC glide ~60ms time constant, constant regardless of interval
-      _osc.frequency.cancelScheduledValues(t);
-      _osc.frequency.setValueAtTime(_osc.frequency.value, t);
-      _osc.frequency.setTargetAtTime(targetFreq, t, 0.018);
-
-      // Envelope does NOT retrigger — gate stays open through destination step
-      _filt.frequency.cancelScheduledValues(t);
-      _gain.gain.cancelScheduledValues(t);
-      _gain.gain.setValueAtTime(_gain.gain.value, t);
-      // Keep volume up for the full slide duration, fade at end
-      _gain.gain.setTargetAtTime(0, t + gateSec * 0.9, 0.04);
-      if(accent){
-        _filt.frequency.setValueAtTime(_filt.frequency.value, t);
-        _filt.frequency.setTargetAtTime(2200, t, 0.005);
-        _filt.frequency.setTargetAtTime(280, t + 0.06, dur / 1000 * 0.35);
-      }
-
-    } else {
-      // ── NORMAL / first note: fresh nodes ──────────────────────────────────
-      if(_osc){ try{ _osc.stop(); }catch(e){} _osc=null; }
-
-      _osc  = ctx.createOscillator();
-      _filt = ctx.createBiquadFilter();
-      _gain = ctx.createGain();
-
-      _osc.type = 'sawtooth';
-      _osc.frequency.value = targetFreq;
-
-      _filt.type = 'lowpass';
-      _filt.frequency.value = accent ? 2200 : 1400;
-      _filt.Q.value = 9;
-      _filt.frequency.setTargetAtTime(280, t + dur / 1000 * 0.25, dur / 1000 * 0.25);
-
-      _gain.gain.value = accent ? 0.42 : 0.26;
-      _gain.gain.setTargetAtTime(0, t + gateSec * 0.85, 0.04);
-
-      _osc.connect(_filt); _filt.connect(_gain); _gain.connect(ctx.destination);
-      _osc.start(t);
-
-      // Non-slide: kill osc after gate closes
-      setTimeout(()=>{
-        if(_osc){ try{ _osc.stop(); }catch(e){} _osc=null; _prevMidi=null; }
-      }, (gateSec + 0.1) * 1000);
-    }
-
-    _prevMidi = midi;
-  } catch(e) {}
-}
-
-// MIDI
-function initMidi(){
-  if(!navigator.requestMIDIAccess){flash('Web MIDI not supported in this browser');return;}
-  navigator.requestMIDIAccess({sysex:true}).then(access=>{
-    state.midiAccess=access;
-    access.onstatechange=()=>renderMidiStatus();
-    renderMidiStatus();
-    renderDevicesModal();
-  }).catch(()=>{flash('MIDI access denied');});
-}
-function getMidiOutputs(){
-  if(!state.midiAccess)return[];
-  return Array.from(state.midiAccess.outputs.values());
-}
-function getMidiInputs(){
-  if(!state.midiAccess)return[];
-  return Array.from(state.midiAccess.inputs.values());
-}
-function renderMidiStatus(){
-  const outputs=getMidiOutputs();
-  const connected=outputs.length>0;
-  state.midiConnected=connected&&!!state.outId;
-  const badge=document.getElementById('midi-badge');
-  const dot=document.getElementById('midi-dot');
-  const txt=document.getElementById('midi-badge-text');
-  if(state.outId&&connected){
-    badge.className='midi-badge connected';
-    dot.className='midi-dot on';
-    txt.textContent='MIDI · CONNECTED';
-  } else {
-    badge.className='midi-badge';
-    dot.className='midi-dot';
-    txt.textContent=connected?'MIDI · SELECT DEVICE':'MIDI · NO DEVICE';
-  }
-}
-function sendNoteOn(midi,vel){
-  if(!state.midiAccess||!state.outId)return;
-  const out=state.midiAccess.outputs.get(state.outId);
-  if(out)out.send([0x90,midi,vel]);
-}
-function sendNoteOff(midi){
-  if(!state.midiAccess||!state.outId)return;
-  const out=state.midiAccess.outputs.get(state.outId);
-  if(out)out.send([0x80,midi,0]);
-}
-function sendCC(cc, val){
-  if(!state.midiAccess||!state.outId)return;
-  const out=state.midiAccess.outputs.get(state.outId);
-  if(out)out.send([0xB0, cc, val]);   // Ch1 CC
-}
-function setSlide(n){
-  state.slideTime = Math.max(0, Math.min(127, n));
-  document.getElementById('slide-val').textContent = state.slideTime;
-  // CC#5 = Portamento Time — controls the TD-3 slide knob directly
-  sendCC(5, state.slideTime);
-  flash('SLIDE · CC5 → ' + state.slideTime);
-}
-
-// ── MIDI Clock reception ──────────────────────────────────────────────────────
-function attachClockListener() {
-  if (!state.midiAccess || !state.inId) return;
-  const inp = state.midiAccess.inputs.get(state.inId);
-  if (!inp) return;
-  inp.onmidimessage = onMidiClockMessage;
-}
-
-function toggleClockMode() {
-  state.clockMode = !state.clockMode;
-  state.clockBpmBuf = [];
-  state.clockLastTime = null;
-  state.clockPulse = 0;
-  const btn = document.getElementById('clock-btn');
-  if (state.clockMode) {
-    btn.className = 't-btn t-btn-clock active';
-    flash('CLOCK · EXT ON');
-    // If already playing with internal clock, switch to waiting for ext clock
-    if (state.isPlaying && state.intervalId) {
-      clearInterval(state.intervalId);
-      state.intervalId = null;
-    }
-  } else {
-    btn.className = 't-btn t-btn-clock';
-    flash('CLOCK · INT');
-    // If playing, restart with internal clock
-    if (state.isPlaying && !state.intervalId) {
-      state.intervalId = setInterval(() => {
-        const len = Math.max(1, state.pattern.length);
-        state.stepRef = nextIndex(state.stepRef, len);
-        state.currentStep = state.stepRef;
-        playStep(state.stepRef);
-        renderStepHighlight();
-      }, stepIntervalMs());
-    }
-  }
-}
-
-function onMidiClockMessage(e) {
-  const status = e.data[0];
-
-  if (status === 0xF8) {             // ── Clock tick (24 PPQN) ──
-    const now = performance.now();
-    if (state.clockLastTime !== null) {
-      const interval = now - state.clockLastTime;
-      state.clockBpmBuf.push(interval);
-      if (state.clockBpmBuf.length > 12) state.clockBpmBuf.shift();
-      const avg = state.clockBpmBuf.reduce((a,b)=>a+b,0) / state.clockBpmBuf.length;
-      const bpm = Math.round(60000 / (avg * 24));
-      if (bpm >= 20 && bpm <= 300 && bpm !== state.pattern.bpm) {
-        state.pattern.bpm = bpm;
-        document.getElementById('bpm-val').textContent = bpm;
-      }
-    }
-    state.clockLastTime = now;
-
-    // Only drive sequencer if clock mode is ON
-    if (!state.clockMode || !state.isPlaying) return;
-    state.clockPulse = (state.clockPulse + 1) % 6;
-    if (state.clockPulse === 0) {
-      const len = Math.max(1, state.pattern.length);
-      state.stepRef = nextIndex(state.stepRef, len);
-      state.currentStep = state.stepRef;
-      playStep(state.stepRef);
-      renderStepHighlight();
-    }
-
-  } else if (status === 0xFA || status === 0xFB) {  // ── Start / Continue ──
-    if (!state.clockMode) return;
-    state.clockPulse = 0;
-    state.clockBpmBuf = [];
-    state.clockLastTime = null;
-    if (state.intervalId) { clearInterval(state.intervalId); state.intervalId = null; }
-    try { getAudio().resume(); } catch(ex) {}
-    state.stepRef = (state.mode === 'forward' && state.dirRef === -1) ? state.pattern.length - 1 : 0;
-    state.invertPhase = 0;
-    state.isPlaying = true;
-    state.currentStep = state.stepRef;
-    playStep(state.stepRef);
-    renderStepHighlight();
-    document.getElementById('play-btn').textContent = '■';
-    flash('CLOCK · START');
-
-  } else if (status === 0xFC) {                     // ── Stop ──
-    if (!state.clockMode) return;
-    state.isPlaying = false;
-    state.currentStep = -1;
-    renderStepHighlight();
-    document.getElementById('play-btn').textContent = '▶';
-    flash('CLOCK · STOP');
-  }
-}
-
-// Sequencer engine
-function stepIntervalMs(){ return (60000 / state.pattern.bpm) / 4; }
-
-// Swing: returns the actual delay for this step index.
-// Even steps (0,2,4…) get base interval * (1 + swing/2),
-// odd steps (1,3,5…) get base interval * (1 - swing/2).
-// swing is 0–100 (%), clamped to useful range 0–66 to avoid 0ms odd steps.
-function swingDelayMs(stepIdx){
-  const base = stepIntervalMs();
-  const s = (state.pattern.swing || 0) / 100;  // 0.0–1.0
-  const isOdd = (stepIdx % 2) === 1;
-  // Classic MPC-style: push the off-beat back
-  // At swing=50% → even=1.5×base, odd=0.5×base (hard shuffle)
-  // At swing=0%  → even=odd=base (straight)
-  const ratio = isOdd ? (1 - s * 0.5) : (1 + s * 0.5);
-  return Math.max(10, base * ratio);
-}
-
-function scheduleNextStep(){
-  if(!state.isPlaying || state.clockMode) return;
-  const len = Math.max(1, state.pattern.length);
-  const next = nextIndex(state.stepRef, len);
-  const delay = swingDelayMs(state.stepRef); // delay until next step = current step's duration
-  state.intervalId = setTimeout(()=>{
-    if(!state.isPlaying) return;
-    state.stepRef = next;
-    state.currentStep = state.stepRef;
-    playStep(state.stepRef);
-    renderStepHighlight();
-    scheduleNextStep();
-  }, delay);
-}
-
-function setSwing(n){
-  state.pattern.swing = Math.max(0, Math.min(66, n));
-  document.getElementById('swing-val').textContent = state.pattern.swing + '%';
-  flash('SWING · ' + state.pattern.swing + '%');
-}
-
-function nextIndex(cur, len){
-  const m = state.mode;
-
-  // ── FORWARD / BOUNCE share dirRef ──────────────────────────────────────────
-  if(m === 'forward'){
-    // dirRef is +1 (→) or -1 (←), set by FWD toggle or bounce reflection
-    let n = cur + state.dirRef;
-    if(n >= len) n = 0;
-    if(n < 0)    n = len - 1;
-    return n;
-  }
-
-  if(m === 'bounce'){
-    let n = cur + state.dirRef;
-    if(n >= len){ state.dirRef = -1; n = len - 2; if(n < 0) n = 0; }
-    if(n < 0)   { state.dirRef =  1; n = 1;        if(n >= len) n = len-1; }
-    return n;
-  }
-
-  if(m === 'random') return Math.floor(Math.random() * len);
-
-  // ── REVERSE: notes were physically flipped → just play forward ─────────────
-  if(m === 'reverse') return (cur + 1) % len;
-
-  // ── INVERT: 0→2→1→3→2→4… skip-one/back-one, bounces at ends ────────────────
-  if(m === 'invert'){
-    let n;
-    if(state.invertPhase === 0){
-      n = cur + 2 * state.dirRef;
-      state.invertPhase = 1;
-    } else {
-      n = cur - 1 * state.dirRef;
-      state.invertPhase = 0;
-    }
-    // Bounce at boundaries
-    if(n >= len){ state.dirRef = -1; n = len - 1; state.invertPhase = 0; }
-    if(n < 0)   { state.dirRef =  1; n = 0;       state.invertPhase = 0; }
-    return n;
-  }
-
-  return (cur + 1) % len;
-}
-
-function playStep(idx){
-  const p = state.pattern;
-  const s = p.steps[idx];
-
-  if(!s || s.gate === 'rest'){
-    // REST — kill sound immediately
-    if(_osc){ try{ _osc.stop(); }catch(e){} _osc=null; }
-    if(_prevMidi !== null){ sendNoteOff(_prevMidi); _prevMidi=null; }
-    return;
-  }
-
-  if(s.gate === 'tie'){
-    // TIE — sustain whatever is already playing, no retrigger
-    // _osc keeps running, no Note Off sent, note held through this step
-    return;
-  }
-
-  // gate === 'on' — fresh note with full attack
-  const midi = (BASE_OCTAVE + 1 + s.octave) * 12 + s.pitch;
-  const vel  = s.accent ? 110 : 80;
-  const dur  = stepIntervalMs();
-
-  // Count consecutive TIE steps after this one to extend gate duration
-  let tieDur = dur;
-  for(let t = idx + 1; t < p.length; t++){
-    if(p.steps[t] && p.steps[t].gate === 'tie') tieDur += dur;
-    else break;
-  }
-
-  sendNoteOn(midi, vel);
-  sendCC(65, s.slide ? 127 : 0);   // CC#65 Portamento On/Off per step
-  if(!state.outId) triggerNote(midi, tieDur, s.accent, s.slide);
-  // Slide: NoteOff fires after next NoteOn → legato overlap → TD-3 portamento
-  // Normal: staccato gate at 72%
-  setTimeout(() => sendNoteOff(midi), s.slide ? tieDur * 1.9 : tieDur * 0.72);
-  _prevMidi = midi;
-}
-function startSeq(){
-  if(state.isPlaying)return;
-  try{getAudio().resume();}catch(e){}
-  // Start position depends on current direction for forward mode
-  if(state.mode === 'bounce'){
-    state.stepRef = 0; state.dirRef = 1;
-  } else if(state.dirRef === -1 && state.mode === 'forward'){
-    state.stepRef = state.pattern.length - 1;
-  } else {
-    state.stepRef = 0;
-  }
-  state.invertPhase = 0;
-  state.isPlaying = true;
-  state.currentStep = state.stepRef;
-  playStep(state.stepRef);
-  renderStepHighlight();
-  if(!state.clockMode){
-    scheduleNextStep();
-  }
-  document.getElementById('play-btn').textContent = '■';
-}
-function stopSeq(){
-  if(state.intervalId) clearTimeout(state.intervalId);
-  state.intervalId = null;
-  if(_osc){ try{ _osc.stop(); }catch(e){} _osc=null; _prevMidi=null; }
-  state.isPlaying = false;
-  state.currentStep = -1;
-  renderStepHighlight();
-  document.getElementById('play-btn').textContent = '▶';
-}
-function togglePlay(){if(state.isPlaying)stopSeq();else startSeq();}
-
-// Pattern editing
-function updateStep(i,patch){
-  state.pattern.steps[i]={...state.pattern.steps[i],...patch};
-  // If we just turned a step to rest, break any TIE chain that follows
-  if(patch.gate==='rest'){
-    for(let j=i+1;j<state.pattern.length;j++){
-      if(state.pattern.steps[j].gate==='tie') state.pattern.steps[j].gate='rest';
-      else break;
-    }
-  }
-  // Re-render this step and neighbors
-  renderCell(i);
-  renderLaneCell(i);
-}
-function onCellPress(stepIdx,rowIdx){
-  const pitchVal=ROW_PITCHES[rowIdx];
-  const cur=state.pattern.steps[stepIdx];
-  if(cur.gate==='on'&&cur.pitch===pitchVal) updateStep(stepIdx,{gate:'rest'});
-  else updateStep(stepIdx,{pitch:pitchVal,gate:'on'});
-}
-
-// Right-click on a cell: extend the note bar by 1 step to the right.
-// If clicking on the last cell of an existing bar (tail), shrink it by 1.
-// If clicking on an empty / rest step, try to extend the note that ends just before it.
-function onCellRightClick(sIdx, pitchVal){
-  const p=state.pattern;
-  const len=p.length;
-
-  // Determine the head of the note we're acting on
-  let headIdx=null;
-
-  const role=barRole(sIdx,pitchVal);
-  if(role==='lit'||role==='head') headIdx=sIdx;
-  else if(role==='body'||role==='tail') headIdx=noteHeadOf(sIdx);
-  else {
-    // Clicked on a rest/empty — check if previous step is the tail of a note on this pitch
-    if(sIdx>0){
-      const prevRole=barRole(sIdx-1,pitchVal);
-      if(prevRole==='lit'||prevRole==='tail') headIdx=noteHeadOf(sIdx-1)??sIdx-1;
-    }
-  }
-
-  if(headIdx===null){ flash('RIGHT-CLICK a note to extend'); return; }
-
-  const span=noteSpan(headIdx);
-  const tailIdx=headIdx+span-1;
-
-  // If right-clicking on the actual last step (tail) of a multi-step bar → shrink
-  if(sIdx===tailIdx && span>1){
-    // Remove the last TIE step
-    p.steps[tailIdx].gate='rest';
-    // Re-render the whole bar range + the freed step
-    for(let j=headIdx;j<=tailIdx;j++) renderCell(j);
-    flash(`↔ ${span-1} step${span-1>1?'s':''}`);
-    return;
-  }
-
-  // Otherwise → extend: add one TIE step after the tail
-  const newTail=tailIdx+1;
-  if(newTail>=len){ flash('Cannot extend past pattern length'); return; }
-  if(p.steps[newTail].gate!=='rest'){ flash('Next step is occupied'); return; }
-
-  p.steps[newTail]={...p.steps[newTail], gate:'tie'};
-  for(let j=headIdx;j<=newTail;j++) renderCell(j);
-  flash(`↔ ${span+1} step${span+1>1?'s':''}`);
-}
-function cycleOctave(i){
-  const cur=state.pattern.steps[i].octave;
-  const nxt=cur===0?1:cur===1?-1:0;
-  updateStep(i,{octave:nxt});
-}
-function toggleAccent(i){updateStep(i,{accent:!state.pattern.steps[i].accent});}
-function toggleSlide(i){updateStep(i,{slide:!state.pattern.steps[i].slide});}
-
-
-
-function applyMode(m){
-  const angles = {forward:-45, bounce:0, reverse:45, random:135, invert:-135, weave:-90};
-
-  // ── FORWARD: toggle direction, never touch notes ───────────────────────────
-  if(m === 'forward'){
-    if(state.mode === 'forward'){
-      // Already forward → flip direction
-      state.dirRef = state.dirRef === 1 ? -1 : 1;
-    } else {
-      state.mode = 'forward';
-      // Keep dirRef as-is (or default to +1 if coming from a non-directional mode)
-      if(state.dirRef === 0) state.dirRef = 1;
-    }
-    const fwd = document.getElementById('btn-forward');
-    fwd.textContent = state.dirRef === 1 ? '▶ FWD' : '◀ FWD';
-    document.querySelectorAll('.mode-btn').forEach(b=>{
-      b.className = 'mode-btn' + (b.dataset.mode === 'forward' ? ' active' : '');
-    });
-    document.getElementById('knob-notch').style.transform = `rotate(${angles.forward}deg)`;
-    flash(state.dirRef === 1 ? 'FWD →' : '← FWD');
-    return;
-  }
-
-  // ── BOUNCE: ping-pong, no note changes ────────────────────────────────────
-  if(m === 'bounce'){
-    state.mode = 'bounce';
-    state.dirRef = 1;
-    document.querySelectorAll('.mode-btn').forEach(b=>{
-      b.className = 'mode-btn' + (b.dataset.mode === 'bounce' ? ' active' : '');
-    });
-    document.getElementById('knob-notch').style.transform = `rotate(${angles.bounce}deg)`;
-    flash('BOUNCE ⇄');
-    return;
-  }
-
-  // ── REVERSE: one-shot — physically flip notes, switch back to forward ──────
-  if(m === 'reverse'){
-    const p = state.pattern;
-    const active = p.steps.slice(0, p.length).reverse();
-    const tail   = p.steps.slice(p.length);
-    state.pattern.steps = [...active, ...tail];
-    // Don't change mode — stay in current playback mode, just flip the data
-    renderSeq();
-    flash('REVERSE · notes flipped');
-    // Visually highlight REVERSE briefly then restore
-    document.querySelectorAll('.mode-btn').forEach(b=>{
-      b.className = 'mode-btn' + (b.dataset.mode === state.mode ? ' active' : '');
-    });
-    const revBtn = document.getElementById('btn-reverse');
-    revBtn.classList.add('active');
-    setTimeout(()=>{ revBtn.classList.remove('active'); }, 400);
-    return;
-  }
-
-  // ── RANDOM: shuffle notes, play forward from step 0 ───────────────────────
-  if(m === 'random'){
-    const p = state.pattern;
-    const active = p.steps.slice(0, p.length);
-    for(let i = active.length - 1; i > 0; i--){
-      const j = Math.floor(Math.random() * (i + 1));
-      [active[i], active[j]] = [active[j], active[i]];
-    }
-    state.pattern.steps = [...active, ...p.steps.slice(p.length)];
-    state.mode = 'random';
-    state.dirRef = 1;
-    renderSeq();
-    document.querySelectorAll('.mode-btn').forEach(b=>{
-      b.className = 'mode-btn' + (b.dataset.mode === 'random' ? ' active' : '');
-    });
-    document.getElementById('knob-notch').style.transform = `rotate(${angles.random}deg)`;
-    flash('RANDOM · shuffled');
-    return;
-  }
-
-  // ── INVERT: 0→2→1→3→2→4… skip-one-back-one ───────────────────────────────
-  if(m === 'invert'){
-    state.mode = 'invert';
-    state.invertPhase = 0;
-    state.dirRef = 1;
-    document.querySelectorAll('.mode-btn').forEach(b=>{
-      b.className = 'mode-btn' + (b.dataset.mode === 'invert' ? ' active' : '');
-    });
-    document.getElementById('knob-notch').style.transform = `rotate(${angles.invert}deg)`;
-    flash('INVERT · skip+back');
-    return;
-  }
-
-  // ── WEAVE: one-shot — physically reorder notes as invert would visit them ──
-  // Simulates the full invert visit sequence for `len` steps, reads the notes
-  // in that order, then writes them back into steps 0..len-1 so forward
-  // playback sounds identical to invert mode on the original pattern.
-  if(m === 'weave'){
-    const p = state.pattern;
-    const len = p.length;
-    const original = p.steps.slice(0, len).map(s => ({...s}));
-
-    // Simulate the exact same invert nextIndex logic to get visit order
-    const visitOrder = [];
-    let cur = 0, dir = 1, phase = 0;
-    visitOrder.push(0);
-    for(let step = 1; step < len; step++){
-      let n;
-      if(phase === 0){ n = cur + 2 * dir; phase = 1; }
-      else           { n = cur - 1 * dir; phase = 0; }
-      if(n >= len){ dir = -1; n = len - 1; phase = 0; }
-      if(n < 0)   { dir =  1; n = 0;       phase = 0; }
-      cur = n;
-      visitOrder.push(cur);
-    }
-
-    // Build new step array: position i gets the note that invert visits at tick i
-    const newSteps = visitOrder.map(srcIdx => ({...original[srcIdx]}));
-    p.steps = [...newSteps, ...p.steps.slice(len)];
-
-    renderSeq();
-    flash('WEAVE · invert baked → FWD');
-
-    // Stay in whatever playback mode we were in — just flash WEAVE briefly
-    document.querySelectorAll('.mode-btn').forEach(b=>{
-      b.className = 'mode-btn' + (b.dataset.mode === state.mode ? ' active' : '');
-    });
-    const weaveBtn = document.getElementById('btn-weave');
-    weaveBtn.classList.add('active');
-    setTimeout(() => { weaveBtn.classList.remove('active'); }, 400);
-    return;
-  }
-
-  // ── OCT FLIP: mirror all active notes vertically around the midpoint ─────────
-  // Computes min+max MIDI value across all gate='on' steps, then mirrors each
-  // note: newMidi = min + max - oldMidi. Decomposes back into pitch + octave.
-  if(m === 'octflip'){
-    const p = state.pattern;
-    const len = p.length;
-    const activeSteps = [];
-    for(let i = 0; i < len; i++){
-      if(p.steps[i].gate === 'on') activeSteps.push(i);
-    }
-    if(activeSteps.length === 0){ flash('No notes to flip'); return; }
-
-    const midiVals = activeSteps.map(i => p.steps[i].octave * 12 + p.steps[i].pitch);
-    const minMidi = Math.min(...midiVals);
-    const maxMidi = Math.max(...midiVals);
-
-    if(minMidi === maxMidi){ flash('All notes same pitch'); return; }
-
-    for(const i of activeSteps){
-      const s = p.steps[i];
-      const oldMidi = s.octave * 12 + s.pitch;
-      const newMidi = minMidi + maxMidi - oldMidi;
-      // Decompose newMidi back into octave (-1/0/1) + pitch (0-11)
-      let newOct = 0, newPitch = newMidi;
-      if(newMidi >= 12)    { newOct =  1; newPitch = newMidi - 12; }
-      else if(newMidi < 0) { newOct = -1; newPitch = newMidi + 12; }
-      newOct   = Math.max(-1, Math.min(1, newOct));
-      newPitch = Math.max(0,  Math.min(11, newPitch));
-      p.steps[i] = { ...s, pitch: newPitch, octave: newOct };
-    }
-
-    renderSeq();
-    flash('OCT FLIP · pitches mirrored');
-
-    document.querySelectorAll('.mode-btn').forEach(b=>{
-      b.className = 'mode-btn' + (b.dataset.mode === state.mode ? ' active' : '');
-    });
-    const octBtn = document.getElementById('btn-octflip');
-    octBtn.classList.add('active');
-    setTimeout(() => { octBtn.classList.remove('active'); }, 400);
-    return;
-  }
-}
-function setBpm(n){
-  n=parseInt(n,10);
-  if(isNaN(n))return;
-  state.pattern.bpm=Math.max(40,Math.min(240,n));
-  document.getElementById('bpm-val').textContent=state.pattern.bpm;
-  if(state.isPlaying&&!state.clockMode){stopSeq();setTimeout(startSeq,50);}
-}
-function setLen(n){state.pattern.length=Math.max(1,Math.min(16,n));document.getElementById('len-val').textContent=state.pattern.length;document.getElementById('step-display').textContent=`— / ${state.pattern.length}`;renderSeq();}
-function setZoom(n){state.zoom=Math.max(28,Math.min(72,n));document.getElementById('zoom-val').textContent=state.zoom+'px';renderSeq();}
-function clearAll(){state.pattern.steps=Array.from({length:MAX_STEPS},blankStep);renderSeq();flash('Cleared');}
-function renderTransportSwing(){document.getElementById('swing-val').textContent=(state.pattern.swing||0)+'%';}
-
-function savePattern(){
-  try{localStorage.setItem(slotKey(state.group,state.bank,state.section),JSON.stringify(state.pattern));flash(`Saved → G${state.group}·B${state.bank}·${state.section}`);}
-  catch(e){flash('Save failed');}
-}
-function loadPattern(){
-  try{
-    const raw=localStorage.getItem(slotKey(state.group,state.bank,state.section));
-    if(raw){state.pattern=JSON.parse(raw);renderSeq();renderTransport();flash(`Loaded ← G${state.group}·B${state.bank}·${state.section}`);}
-    else flash('Slot is empty');
-  }catch(e){flash('Load failed');}
-}
-// ── TD-3 SysEx helpers ────────────────────────────────────────────────────────
-// Protocol from https://303patterns.com/td3-midi.html (Brad Isbell, AudioPump)
-// SysEx header common to all TD-3 messages: F0 00 20 32 00 01 0A ... F7
-const TD3_HDR = [0x00, 0x20, 0x32, 0x00, 0x01, 0x0A];
-
-// Group 1-4 → 0-3 ; Bank '1'-'8' → 0-7; Section 'A'/'B' → 1-8 / 9-16
-function td3SlotBytes() {
-  const grp  = (state.group - 1) & 0x03;          // 0-3
-  const bank = parseInt(state.bank, 10) - 1;       // 0-7
-  const sec  = state.section === 'A' ? 0 : 1;      // 0 or 1
-  const pat  = bank + (sec * 8) + 1;               // 1-8 (A) or 9-16 (B)
-  return [grp, pat];
-}
-
-// Convert app pattern → TD-3 SysEx 0x78 payload
-// Encoding verified against 303patterns.com spec.
-function patternToSysex() {
-  const p   = state.pattern;
-  const [grp, pat] = td3SlotBytes();
-  // F0 header + TD3_HDR + cmd 0x78 + grp + pat + 0x00 0x00
-  const msg = [0xF0, ...TD3_HDR, 0x78, grp, pat, 0x00, 0x00];
-
-  // Helper: same bitmask layout for tie/rest
-  // Layout: xxxx7654 xxxx3210 xxxxFEDC xxxxBA98
-  // byte0=steps7-4, byte1=steps3-0, byte2=stepsF-C, byte3=stepsB-8
-  function makeBitmask(gateName, defaultBit) {
-    const bits = [defaultBit, defaultBit, defaultBit, defaultBit];
-    const byteMap = [1, 0, 3, 2]; // group->byte index
-    for (let i = 0; i < 16; i++) {
-      if (p.steps[i].gate === gateName) {
-        const byteIdx = byteMap[Math.floor(i / 4)];
-        const bitPos  = 3 - (i % 4);
-        if (defaultBit === 0x0F)
-          bits[byteIdx] &= ~(1 << bitPos); // clear bit (rest: start all-1, clear active)
-        else
-          bits[byteIdx] |=  (1 << bitPos); // set bit   (tie: start all-0, set ties)
-      }
-    }
-    return bits;
-  }
-
-  // Pitches: 16 steps x 2 bytes (MSB=octave 0x00/0x01/0x02, LSB=semitone 0x00-0x0B)
-  for (let i = 0; i < 16; i++) {
-    const s = p.steps[i];
-    if (s.gate === 'on') {
-      const msb = s.octave < 0 ? 0x00 : s.octave > 0 ? 0x02 : 0x01;
-      msg.push(msb, s.pitch & 0x0F);
-    } else {
-      msg.push(0x00, 0x08); // canonical null pitch
-    }
-  }
-
-  // Accent: 16 steps x 2 bytes
-  for (let i = 0; i < 16; i++) {
-    const s = p.steps[i];
-    msg.push(0x00, (s.gate === 'on' && s.accent) ? 0x01 : 0x00);
-  }
-
-  // Slide: 16 steps x 2 bytes
-  for (let i = 0; i < 16; i++) {
-    const s = p.steps[i];
-    msg.push(0x00, (s.gate === 'on' && s.slide) ? 0x01 : 0x00);
-  }
-
-  // Triplet: off
-  msg.push(0x00, 0x00);
-
-  // Step count
-  const len = Math.max(1, Math.min(16, p.length));
-  msg.push(len <= 8 ? 0x00 : 0x01, len <= 8 ? len - 1 : len - 9);
-
-  // Unknown
-  msg.push(0x00, 0x00);
-
-  // Tie bitmask (start all-0, set tie steps)
-  msg.push(...makeBitmask('tie', 0x00));
-
-  // Rest bitmask (start all-1 = 0x0F, clear active steps)
-  msg.push(...makeBitmask('on', 0x0F));
-
-  msg.push(0xF7);
-  return msg;
-}
-
-// Parse TD-3 SysEx 0x78 response → update app state
-function sysexToPattern(data) {
-  // data is Uint8Array; index 0x07=cmd, 0x08=grp, 0x09=pat, 0x0A-0x0B=??
-  // 0x0C..0x2B = pitches (32 bytes = 16×2)
-  // 0x2C..0x4B = accent (32 bytes)
-  // 0x4C..0x6B = slide (32 bytes)
-  // 0x6C-0x6D = triplet
-  // 0x6E-0x6F = step count
-  // 0x72-0x75 = tie
-  // 0x76-0x79 = rest bitmask
-  const steps = [];
-  for (let i = 0; i < 16; i++) {
-    const pBase = 0x0C + i * 2;
-    const msb   = data[pBase];
-    const lsb   = data[pBase + 1];
-    const pitch = ((msb & 0x0F) << 4) | (lsb & 0x0F); // combined 8-bit value
-    const semitone = pitch & 0x0F;                      // lower nibble = semitone
-    const octave   = (msb === 0x00) ? -1 : (msb === 0x02 ? 1 : 0);
-
-    const aBase  = 0x2C + i * 2;
-    const accent = data[aBase + 1] === 0x01;
-    const sBase  = 0x4C + i * 2;
-    const slide  = data[sBase + 1] === 0x01;
-
-    // Rest bitmask: 0x76-0x79
-    const byteIdx      = Math.floor(i / 4);
-    const stepInNibble = 3 - (i % 4);
-    const isRest       = (data[0x76 + byteIdx] >> stepInNibble) & 1;
-
-    steps.push({
-      pitch: semitone,
-      gate: isRest ? 'rest' : 'on',
-      octave,
-      accent,
-      slide
-    });
-  }
-
-  // Step count
-  const scMsb = data[0x6E];
-  const scLsb = data[0x6F];
-  const length = scMsb === 0x01 ? (scLsb + 9) : (scLsb + 1);
-
-  state.pattern.steps = steps;
-  state.pattern.length = Math.max(1, Math.min(16, length));
-}
-
-// ── PITCH TO TD-3 ─────────────────────────────────────────────────────────────
-// TD-3 must be in PITCH MODE (LED on) before pressing this button.
-// Sends one MIDI Note On per active step in sequence.
-// - Pitch + octave → correct MIDI note number
-// - Accent → velocity 110 (above default threshold of 100)
-// - No accent → velocity 70
-// - Slide → overlapping notes: next Note On fires BEFORE this Note Off
-// - No slide → Note Off fires before next Note On (staccato)
-// Steps with gate='rest' or gate='tie' are skipped — only 'on' steps have pitches.
-// The TD-3 advances one step per received Note On in pitch mode.
-
-let _sendCancelled = false;
-
-function cancelSend() {
-  _sendCancelled = true;
-  hideSendBar();
-  flash('CANCELLED');
-}
-
-function showSendBar(label, step, total) {
-  const bar = document.getElementById('send-bar');
-  bar.style.display = 'flex';
-  document.getElementById('send-label').textContent = label;
-  document.getElementById('send-progress').style.width = (step / total * 100) + '%';
-  document.getElementById('send-step').textContent = `${step}/${total}`;
-}
-
-function hideSendBar() {
-  const bar = document.getElementById('send-bar');
-  if (bar) bar.style.display = 'none';
-}
-
-function fetchFromTD3() {
-  if (!state.outId || !state.inId) {
-    flash((!state.outId && !state.inId) ? 'TD-3 not connected' : (!state.outId ? 'No MIDI output' : 'No MIDI input — select input device'));
-    return;
-  }
-  const out = state.midiAccess && state.midiAccess.outputs.get(state.outId);
-  const inp = state.midiAccess && state.midiAccess.inputs.get(state.inId);
-  if (!out || !inp) { flash('MIDI device not found'); return; }
-  if (!state.midiAccess.sysexEnabled) { flash('Enable SysEx in MIDI permissions'); return; }
-
-  const [grp, pat] = td3SlotBytes();
-  const req = [0xF0, ...TD3_HDR, 0x77, grp, pat, 0xF7];
-
-  let timeoutId = null;
-  function onMsg(e) {
-    const d = e.data;
-    if (d.length < 8) return;
-    if (d[0] !== 0xF0) return;
-    if (d[1]!==0x00||d[2]!==0x20||d[3]!==0x32||d[4]!==0x00||d[5]!==0x01||d[6]!==0x0A) return;
-    if (d[7] !== 0x78) return;
-    clearTimeout(timeoutId);
-    inp.onmidimessage = onMidiClockMessage;
-    try {
-      sysexToPattern(d);
-      renderSeq();
-      renderTransport();
-      flash(`← TD-3 G${state.group}·B${state.bank}·${state.section} loaded`);
-    } catch(err) { flash('Parse error: ' + err.message); }
-  }
-
-  inp.onmidimessage = onMsg;
-  timeoutId = setTimeout(() => {
-    inp.onmidimessage = onMidiClockMessage;
-    flash('No reply from TD-3 (timeout)');
-  }, 3000);
-
-  try {
-    out.send(req);
-    flash('← requesting from TD-3…');
-  } catch(e) {
-    inp.onmidimessage = null;
-    clearTimeout(timeoutId);
-    flash('Request error: ' + e.message);
-  }
-}
-
-function pitchToTD3() {
-  if (!state.outId) { flash('No MIDI output — connect TD-3 first'); return; }
-  const out = state.midiAccess && state.midiAccess.outputs.get(state.outId);
-  if (!out) { flash('TD-3 output not found'); return; }
-
-  const p = state.pattern;
-  const len = Math.max(1, Math.min(16, p.length));
-
-  // Find the "main note" fallback: lowest pitched active step (most root-like),
-  // or C (pitch 0, octave 0) if nothing is set at all.
-  let fallbackPitch = 0, fallbackOctave = 0, fallbackAccent = false;
-  const onSteps = p.steps.slice(0, len).filter(s => s.gate === 'on');
-  if (onSteps.length > 0) {
-    // Pick the lowest MIDI value among active notes as the "root" fallback
-    let lowestMidi = Infinity, lowestStep = null;
-    for (const s of onSteps) {
-      const m = 36 + (s.octave * 12) + s.pitch;
-      if (m < lowestMidi) { lowestMidi = m; lowestStep = s; }
-    }
-    fallbackPitch  = lowestStep.pitch;
-    fallbackOctave = lowestStep.octave;
-    fallbackAccent = lowestStep.accent;
-  }
-
-  // Build a send list for EVERY step in the pattern length.
-  // gate='on' → use its own pitch; rest/tie → use fallback note.
-  // This ensures the TD-3 advances exactly one step per Note On in pitch mode.
-  const sendList = [];
-  for (let i = 0; i < len; i++) {
-    const s = p.steps[i];
-    if (s.gate === 'on') {
-      sendList.push({ pitch: s.pitch, octave: s.octave, accent: s.accent, slide: s.slide, stepIdx: i, isFallback: false });
-    } else {
-      // rest or tie — send the fallback (root) note so TD-3 still advances
-      sendList.push({ pitch: fallbackPitch, octave: fallbackOctave, accent: fallbackAccent, slide: false, stepIdx: i, isFallback: true });
-    }
-  }
-
-  // TD-3 base octave = MIDI 36 (C2). Octave shift: -1 → 24, 0 → 36, +1 → 48
-  const TD3_BASE = 36;
-  const STEP_MS  = 350;
-  const GATE_MS  = 200;
-
-  _sendCancelled = false;
-  let i = 0;
-
-  function sendNext() {
-    if (_sendCancelled) return;
-
-    // Clean up previous note
-    if (i > 0) {
-      const prev = sendList[i - 1];
-      if (!prev.slide) {
-        const prevMidi = TD3_BASE + (prev.octave * 12) + prev.pitch;
-        out.send([0x80, prevMidi, 0]);
-      }
-    }
-
-    if (i >= sendList.length) {
-      // Final note off
-      if (sendList.length > 0) {
-        const last = sendList[sendList.length - 1];
-        const lastMidi = TD3_BASE + (last.octave * 12) + last.pitch;
-        out.send([0x80, lastMidi, 0]);
-      }
-      hideSendBar();
-      const noteCount = sendList.filter(s => !s.isFallback).length;
-      flash(`PITCH DONE · ${len} steps (${noteCount} notes + ${len - noteCount} fill)`);
-      return;
-    }
-
-    const entry = sendList[i];
-    const midi = TD3_BASE + (entry.octave * 12) + entry.pitch;
-    const vel  = entry.accent ? 110 : 70;
-
-    out.send([0x90, midi, vel]);
-
-    showSendBar('PITCH TO TD', i + 1, sendList.length);
-
-    i++;
-    setTimeout(sendNext, STEP_MS);
-  }
-
-  flash(`PITCH MODE · ${len} steps…`);
-  sendNext();
-}
-
-// ── SYSEX TO TD-3 ────────────────────────────────────────────────────────────
-// Sends the full pattern (pitches + ties + rests + accent + slide + length)
-// directly to the TD-3 via SysEx 0x78 PUT command.
-// Requirements: MODE knob = PAT WRITE, clock source = USB, DIN cables unplugged.
-
-function timeToTD3() {
-  if (!state.outId) { flash('No MIDI output — connect TD-3 first'); return; }
-  if (!state.midiAccess) { flash('MIDI not ready'); return; }
-  const out = state.midiAccess.outputs.get(state.outId);
-  if (!out) { flash('TD-3 output not found'); return; }
-
-  const msg = patternToSysex();
-
-  try {
-    out.send(msg);
-    flash('SYSEX SENT → G' + state.group + ' B' + state.bank + ' ' + state.section);
-    // Show what was sent in the send bar briefly
-    showSendBar('SYSEX → TD-3', 1, 1);
-    setTimeout(hideSendBar, 1200);
-  } catch(e) {
-    flash('Send error: ' + e.message);
-  }
-}
-
-// Toast
-function flash(msg){
-  const t=document.getElementById('toast');
-  t.textContent=msg;t.style.display='block';
-  clearTimeout(flash._t);
-  flash._t=setTimeout(()=>{t.style.display='none';},1600);
-}
-
-// Modals
-function openModal(which){document.getElementById('modal-'+which).classList.add('open');if(which==='devices')renderDevicesModal();}
-function closeModal(which){document.getElementById('modal-'+which).classList.remove('open');}
-
-function renderDevicesModal(){
-  const outputs=getMidiOutputs();
-  const inputs=getMidiInputs();
-  const oRow=document.getElementById('outputs-row');
-  const iRow=document.getElementById('inputs-row');
-  oRow.innerHTML='';iRow.innerHTML='';
-  const noneOut=document.createElement('button');
-  noneOut.className='pill'+(!state.outId?' on':'');
-  noneOut.textContent='NONE';
-  noneOut.onclick=()=>{state.outId=null;renderMidiStatus();renderDevicesModal();};
-  oRow.appendChild(noneOut);
-  outputs.forEach(o=>{
-    const b=document.createElement('button');
-    b.className='pill'+(state.outId===o.id?' on':'');
-    b.textContent=o.name;
-    b.onclick=()=>{state.outId=o.id;renderMidiStatus();renderDevicesModal();};
-    oRow.appendChild(b);
-  });
-  const noneIn=document.createElement('button');
-  noneIn.className='pill'+(!state.inId?' on':'');
-  noneIn.textContent='NONE';
-  noneIn.onclick=()=>{
-    // Remove clock listener from old input if any
-    if(state.inId && state.midiAccess){
-      const old=state.midiAccess.inputs.get(state.inId);
-      if(old) old.onmidimessage=null;
-    }
-    state.inId=null;
-    state.clockMode=false;
-    renderDevicesModal();
-  };
-  iRow.appendChild(noneIn);
-  inputs.forEach(i=>{
-    const b=document.createElement('button');
-    b.className='pill'+(state.inId===i.id?' on':'');
-    b.textContent=i.name;
-    b.onclick=()=>{state.inId=i.id;attachClockListener();renderDevicesModal();};
-    iRow.appendChild(b);
-  });
-  if(outputs.length===0){
-    const p=document.createElement('p');
-    p.style.cssText='color:#5a6170;font-size:10px;margin-top:4px';
-    p.textContent='No MIDI devices detected. Connect TD-3 via USB camera adapter.';
-    oRow.appendChild(p);
-  }
-}
-
-function renderPatternsModal(){
-  const gRow=document.getElementById('groups-row');
-  const bRow=document.getElementById('banks-row');
-  const sRow=document.getElementById('sections-row');
-  gRow.innerHTML='';bRow.innerHTML='';sRow.innerHTML='';
-  GROUPS.forEach(g=>{
-    const b=document.createElement('button');
-    b.className='pill'+(state.group===g?' on':'');
-    b.textContent=g;
-    b.onclick=()=>{state.group=g;updateSlotText();renderPatternsModal();loadPatternSilent();};
-    gRow.appendChild(b);
-  });
-  BANKS.forEach(bk=>{
-    const b=document.createElement('button');
-    b.className='pill'+(state.bank===bk?' on':'');
-    b.textContent=bk;
-    b.onclick=()=>{state.bank=bk;updateSlotText();renderPatternsModal();loadPatternSilent();};
-    bRow.appendChild(b);
-  });
-  SECTIONS.forEach(s=>{
-    const b=document.createElement('button');
-    b.className='pill'+(state.section===s?' on':'');
-    b.textContent=s;
-    b.onclick=()=>{state.section=s;updateSlotText();renderPatternsModal();loadPatternSilent();};
-    sRow.appendChild(b);
-  });
-}
-document.getElementById('modal-patterns').addEventListener('click',()=>{});
-function updateSlotText(){document.getElementById('slot-text').textContent=`G${state.group} · B${state.bank} · ${state.section}`;}
-function loadPatternSilent(){
-  try{
-    const raw=localStorage.getItem(slotKey(state.group,state.bank,state.section));
-    if(raw){state.pattern=JSON.parse(raw);}
-    else{state.pattern=blankPattern();}
-    renderSeq();renderTransport();
-  }catch(e){state.pattern=blankPattern();renderSeq();}
-}
-
-// Rendering
-function renderTransport(){
-  document.getElementById('bpm-val').textContent=state.pattern.bpm;
-  document.getElementById('len-val').textContent=state.pattern.length;
-  document.getElementById('zoom-val').textContent=state.zoom+'px';
-  document.getElementById('slide-val').textContent=state.slideTime;
-  document.getElementById('swing-val').textContent=(state.pattern.swing||0)+'%';
-  document.getElementById('step-display').textContent=`— / ${state.pattern.length}`;
-}
-
-// Returns the 0-based step index of the NOTE head that owns step i (via TIE chain),
-// or null if step i is not part of any note.
-function noteHeadOf(i){
-  const p=state.pattern;
-  if(p.steps[i].gate==='on') return i;
-  if(p.steps[i].gate==='tie'){
-    // walk back to find the head
-    for(let j=i-1;j>=0;j--){
-      if(p.steps[j].gate==='on') return j;
-      if(p.steps[j].gate!=='tie') return null;
-    }
-  }
+// Heuristic: guess which TIME MODE function a press might be
+function guessTimeMode(byte) {
+  if (byte === 0x11) return 'NOTE';
+  if (byte === 0x17) return 'TIE';
+  if (byte === 0x16) return 'REST';
+  if (byte === 0x12) return 'NOTE?';  // old wrong guess
+  if (byte === 0x13) return 'REST?';  // old wrong guess
   return null;
 }
 
-// Returns how many steps a NOTE at headIdx spans (1 = just itself, 2 = note+1 tie, etc.)
-function noteSpan(headIdx){
-  const p=state.pattern;
-  let span=1;
-  for(let j=headIdx+1;j<p.length;j++){
-    if(p.steps[j].gate==='tie') span++;
-    else break;
-  }
-  return span;
-}
+// Capture state — first press of each type wins
+const captured = { note: null, tie: null, rest: null };
 
-// Compute bar role for a cell: null | 'head' | 'body' | 'tail'
-function barRole(sIdx, pitchVal){
-  const p=state.pattern;
-  const s=p.steps[sIdx];
-  if(s.gate==='on' && s.pitch===pitchVal){
-    const span=noteSpan(sIdx);
-    return span===1 ? 'lit' : 'head';
-  }
-  if(s.gate==='tie'){
-    const head=noteHeadOf(sIdx);
-    if(head===null) return null;
-    const hs=p.steps[head];
-    if(hs.pitch!==pitchVal) return null;
-    // Is next step also a tie for this pitch?
-    const nextIsTie=(sIdx+1<p.length && p.steps[sIdx+1].gate==='tie');
-    return nextIsTie ? 'body' : 'tail';
-  }
-  return null;
-}
+function toHex(b) { return '0x' + b.toString(16).toUpperCase().padStart(2,'0'); }
 
-function cellCls(sIdx, pitchVal, rIdx){
-  const p=state.pattern;
-  const s=p.steps[sIdx];
-  const beyond=sIdx>=p.length;
-  const isBlack=NOTE_NAMES[pitchVal%12].includes('#');
-  const role=barRole(sIdx,pitchVal);
-  const accent=(role==='lit'||role==='head') ? s.accent
-    : (role==='body'||role==='tail') ? p.steps[noteHeadOf(sIdx)].accent : false;
+function addLog(data) {
+  const ts = ((performance.now() - startTime) / 1000).toFixed(2) + 's';
+  const bytes = Array.from(data);
+  const hexStr = bytes.map(toHex).join(' ');
+  const decStr = bytes.map(b=>b).join(' ');
 
-  let cls='cell';
-  if(isBlack) cls+=' black';
-  if(sIdx%4===0) cls+=' beat';
-  if(beyond) cls+=' beyond';
-  if(state.currentStep===sIdx) cls+=' playhead';
+  let label = '';
+  let labelClass = '';
 
-  if(role==='lit'){ cls+=' lit'; if(accent) cls+=' accent'; }
-  else if(role==='head'){ cls+=' note-head'; if(accent) cls+=' accent'; }
-  else if(role==='body'){ cls+=' note-body'; if(accent) cls+=' accent'; }
-  else if(role==='tail'){ cls+=' note-tail'; if(accent) cls+=' accent'; }
+  const status = bytes[0];
+  const d1 = bytes[1];
+  const d2 = bytes[2];
 
-  return cls;
-}
+  if (status === 0xA4) {
+    const btnName = KNOWN[d1] || ('btn ' + toHex(d1));
+    const press = d2 === 0x01;
+    const release = d2 === 0x00;
+    const tm = guessTimeMode(d1);
 
-function renderCell(sIdx){
-  ROW_PITCHES.forEach((pitchVal,rIdx)=>{
-    const el=document.getElementById(`cell-${sIdx}-${rIdx}`);
-    if(!el) return;
-    el.className=cellCls(sIdx,pitchVal,rIdx);
-  });
-  // Also re-render adjacent cells that may be part of the same bar
-  const p=state.pattern;
-  if(p.steps[sIdx].gate==='tie'){
-    const head=noteHeadOf(sIdx);
-    if(head!==null){
-      for(let j=head;j<=sIdx;j++){
-        ROW_PITCHES.forEach((pv,ri)=>{
-          const el=document.getElementById(`cell-${j}-${ri}`);
-          if(el) el.className=cellCls(j,pv,ri);
-        });
-      }
+    if (press) {
+      label = 'KEY-AT Ch5 · ' + btnName + (tm ? ' ← ' + tm : '');
+      labelClass = tm || 'STEP';
+    } else {
+      label = '(release) · ' + btnName;
+      labelClass = 'release';
     }
-  }
-  // Re-render the step after in case it was a tail that's now unlinked
-  if(sIdx+1<MAX_STEPS){
-    ROW_PITCHES.forEach((pv,ri)=>{
-      const el=document.getElementById(`cell-${sIdx+1}-${ri}`);
-      if(el) el.className=cellCls(sIdx+1,pv,ri);
-    });
-  }
-}
 
-function renderLaneCell(i){
-  const s=state.pattern.steps[i];
-  const oct=document.getElementById(`oct-${i}`);
-  if(oct){
-    oct.innerHTML=s.octave===1?'<span class="oct-up">▲</span>':s.octave===-1?'<span class="oct-down">▼</span>':'<div class="lane-dot"></div>';
-  }
-  const acc=document.getElementById(`acc-${i}`);
-  if(acc){acc.querySelector('.accent-dot').className='accent-dot'+(s.accent?' on':'');}
-  const sld=document.getElementById(`sld-${i}`);
-  if(sld){const d=sld.querySelector('.slide-dot');d.className='slide-dot'+(s.slide?' on':'');d.textContent='~';}
-}
-
-function renderStepHighlight(){
-  const disp=state.currentStep<0?`— / ${state.pattern.length}`:`${String(state.currentStep+1).padStart(2,'0')} / ${String(state.pattern.length).padStart(2,'0')}`;
-  document.getElementById('step-display').textContent=disp;
-  for(let i=0;i<MAX_STEPS;i++){
-    const numEl=document.getElementById(`stepnum-${i}`);
-    if(numEl){
-      let cls='step-num-cell';
-      if(i>=state.pattern.length)cls+=' beyond';
-      if(state.currentStep===i)cls+=' active';
-      numEl.className=cls;
+    // Auto-capture: first press for each time-mode function
+    if (press && tm === 'NOTE' && !captured.note) {
+      captured.note = d1;
+      document.getElementById('cap-note').textContent = toHex(d1);
+      document.getElementById('cap-note').classList.add('set');
     }
-    ROW_PITCHES.forEach((pitchVal,rIdx)=>{
-      const el=document.getElementById(`cell-${i}-${rIdx}`);
-      if(el) el.className=cellCls(i,pitchVal,rIdx);
-    });
-  }
-}
-
-function renderSeq(){
-  const cw=state.zoom;
-  const container=document.getElementById('seq-inner');
-  container.innerHTML='';
-
-  // Step number row
-  const snr=document.createElement('div');snr.className='step-num-row';
-  const sp=document.createElement('div');sp.className='step-num-spacer';snr.appendChild(sp);
-  for(let i=0;i<MAX_STEPS;i++){
-    const c=document.createElement('div');
-    c.id=`stepnum-${i}`;
-    c.className='step-num-cell'+(i>=state.pattern.length?' beyond':'');
-    c.style.width=(cw+2)+'px';
-    c.textContent=i+1;
-    snr.appendChild(c);
-  }
-  container.appendChild(snr);
-
-  // Piano roll rows
-  ROW_PITCHES.forEach((pitchVal,rIdx)=>{
-    const isBlack=NOTE_NAMES[pitchVal%12].includes('#');
-    const isC=pitchVal%12===0;
-    const row=document.createElement('div');row.className='roll-row';
-    const lbl=document.createElement('div');
-    lbl.className='row-label'+(isBlack?' black':'')+(isC?' is-c':'');
-    const lt=document.createElement('span');lt.className='row-label-text';lt.textContent=ROW_LABELS[rIdx];
-    lbl.appendChild(lt);row.appendChild(lbl);
-    for(let sIdx=0;sIdx<MAX_STEPS;sIdx++){
-      const cell=document.createElement('div');
-      cell.className=cellCls(sIdx,pitchVal,rIdx);
-      cell.style.width=cw+'px';
-      cell.id=`cell-${sIdx}-${rIdx}`;
-      const inner=document.createElement('div');inner.className='cell-inner';
-      cell.appendChild(inner);
-      const si=sIdx,ri=rIdx,pv=pitchVal;
-      cell.onclick=()=>onCellPress(si,ri);
-      cell.oncontextmenu=(e)=>{ e.preventDefault(); onCellRightClick(si,pv); };
-      row.appendChild(cell);
+    if (press && tm === 'TIE' && !captured.tie) {
+      captured.tie = d1;
+      document.getElementById('cap-tie').textContent = toHex(d1);
+      document.getElementById('cap-tie').classList.add('set');
     }
-    container.appendChild(row);
-  });
+    if (press && tm === 'REST' && !captured.rest) {
+      captured.rest = d1;
+      document.getElementById('cap-rest').textContent = toHex(d1);
+      document.getElementById('cap-rest').classList.add('set');
+    }
 
-  // OCT lane
-  const octRow=makeLaneRow('OCT');
-  for(let i=0;i<MAX_STEPS;i++){
-    const s=state.pattern.steps[i];
-    const lc=document.createElement('div');
-    lc.className='lane-cell'+(i>=state.pattern.length?' beyond':'');
-    lc.style.width=cw+'px';lc.id=`oct-${i}`;
-    lc.innerHTML=s.octave===1?'<span class="oct-up">▲</span>':s.octave===-1?'<span class="oct-down">▼</span>':'<div class="lane-dot"></div>';
-    const ii=i;lc.onclick=()=>cycleOctave(ii);
-    octRow.appendChild(lc);
-  }
-  container.appendChild(octRow);
-
-  // ACC lane
-  const accRow=makeLaneRow('ACC');
-  for(let i=0;i<MAX_STEPS;i++){
-    const s=state.pattern.steps[i];
-    const lc=document.createElement('div');
-    lc.className='lane-cell'+(i>=state.pattern.length?' beyond':'');
-    lc.style.width=cw+'px';lc.id=`acc-${i}`;
-    lc.innerHTML=`<div class="accent-dot${s.accent?' on':''}"></div>`;
-    const ii=i;lc.onclick=()=>toggleAccent(ii);
-    accRow.appendChild(lc);
-  }
-  container.appendChild(accRow);
-
-  // SLD lane
-  const sldRow=makeLaneRow('SLD');
-  for(let i=0;i<MAX_STEPS;i++){
-    const s=state.pattern.steps[i];
-    const lc=document.createElement('div');
-    lc.className='lane-cell'+(i>=state.pattern.length?' beyond':'');
-    lc.style.width=cw+'px';lc.id=`sld-${i}`;
-    lc.innerHTML=`<div class="slide-dot${s.slide?' on':''}">~</div>`;
-    const ii=i;lc.onclick=()=>toggleSlide(ii);
-    sldRow.appendChild(lc);
-  }
-  container.appendChild(sldRow);
-
-
-}
-
-
-
-function makeLaneRow(label){
-  const row=document.createElement('div');row.className='lane-row';
-  const lbl=document.createElement('div');
-  lbl.className='row-label lane-label-cell';
-  const lt=document.createElement('span');lt.className='lane-label-text';lt.textContent=label;
-  lbl.appendChild(lt);row.appendChild(lbl);
-  return row;
-}
-
-// Init
-renderSeq();
-renderTransport();
-renderPatternsModal();
-initMidi();
-document.getElementById('modal-patterns').querySelector('.modal-card').onclick=e=>e.stopPropagation();
-
-// ══════════════════════════════════════════════════════════════
-// LFO ENGINE
-// TD-3 CC targets (official Behringer TD-3 MIDI implementation):
-//   Cutoff        CC 74
-//   Resonance     CC 71
-//   Env Mod Depth CC 12
-//   Decay         CC 75  (CC 80 on some firmware — 75 is canonical)
-//   Accent        CC 16
-//   Filter Track  CC 13
-// ══════════════════════════════════════════════════════════════
-const LFO_TARGETS = [
-  {label:'CUTOFF',  cc:74},
-  {label:'ACCENT',  cc:120},
-];
-const LFO_MAX = 3;
-const LFO_BPM_DIVS = ['1/16','1/8','1/4','1/2','1/1','2/1','4/1'];
-const LFO_BPM_MULTS= [0.25,  0.5,  1,    2,    4,    8,    16   ]; // beat multiples
-
-let lfoState = {
-  open: false,
-  lfos: [], // [{id,wave,rateMode,bpmDiv,knobRate,target,phase,animId,active}]
-  nextId: 0,
-};
-
-function makeLfo(){
-  return {
-    id: lfoState.nextId++,
-    wave: 'sin',       // 'sin'|'tri'|'sqr'
-    rateMode: 'bpm',   // 'bpm'|'knob'
-    bpmDivIdx: 2,      // index into LFO_BPM_DIVS (default 1/4)
-    knobRate: 64,      // 0-127 manual rate
-    target: null,      // null or index into LFO_TARGETS
-    depth: 127,        // 0-127 amplitude
-    phase: 0,
-    lastCcVal: -1,
-    animId: null,
-    active: true,
-  };
-}
-
-function lfoWaveValue(wave, phase){
-  // phase 0..1
-  switch(wave){
-    case 'sin': return (Math.sin(phase*2*Math.PI)+1)/2;
-    case 'tri': return phase<0.5? phase*2 : 2-phase*2;
-    case 'sqr': return phase<0.5? 1 : 0;
-  }
-  return 0;
-}
-
-function lfoFreqHz(lfo){
-  if(lfo.rateMode==='knob'){
-    // 0-127 maps ~0.05Hz to ~20Hz (log)
-    return 0.05 * Math.pow(400, lfo.knobRate/127);
-  }
-  // BPM sync
-  const bpm = state.pattern.bpm || 120;
-  const beats = LFO_BPM_MULTS[lfo.bpmDivIdx];
-  const beatsPerSec = bpm/60;
-  return beatsPerSec/beats;
-}
-
-// Per-LFO animation tick
-let _lfoLastTs = {};
-function lfoTick(id, ts){
-  const lfo = lfoState.lfos.find(l=>l.id===id);
-  if(!lfo || !lfo.active) return;
-
-  const dt = _lfoLastTs[id]!==undefined ? (ts-_lfoLastTs[id])/1000 : 0;
-  _lfoLastTs[id] = ts;
-
-  const freq = lfoFreqHz(lfo);
-  lfo.phase = (lfo.phase + freq*dt) % 1;
-  const val = lfoWaveValue(lfo.wave, lfo.phase);
-  const ccVal = Math.round(val * (lfo.depth/127) * 127);
-
-  // Send MIDI CC if target set and value changed
-  if(lfo.target!==null && ccVal!==lfo.lastCcVal){
-    const t = LFO_TARGETS[lfo.target];
-    sendCC(t.cc, ccVal);
-    lfo.lastCcVal = ccVal;
-  }
-
-  // Update mini viz
-  updateLfoViz(id, lfo.phase, lfo.wave);
-
-  lfo.animId = requestAnimationFrame(ts2=>lfoTick(id,ts2));
-}
-
-function startLfo(id){
-  const lfo = lfoState.lfos.find(l=>l.id===id);
-  if(!lfo) return;
-  if(lfo.animId) cancelAnimationFrame(lfo.animId);
-  delete _lfoLastTs[id];
-  lfo.animId = requestAnimationFrame(ts=>lfoTick(id,ts));
-}
-
-function stopLfo(id){
-  const lfo = lfoState.lfos.find(l=>l.id===id);
-  if(!lfo) return;
-  if(lfo.animId){ cancelAnimationFrame(lfo.animId); lfo.animId=null; }
-}
-
-// ── viz (scrolling wave on canvas-like SVG path) ──────────────
-function updateLfoViz(id, phase, wave){
-  const svg = document.getElementById(`lfo-viz-path-${id}`);
-  if(!svg) return;
-  const W=120, H=20, pts=[];
-  for(let x=0;x<W;x++){
-    const p=((x/W)+phase)%1;
-    const y=H-(lfoWaveValue(wave,p)*(H-2)+1);
-    pts.push(`${x},${y.toFixed(1)}`);
-  }
-  svg.setAttribute('points', pts.join(' '));
-}
-
-// ── render LFO list ───────────────────────────────────────────
-function renderLfoList(){
-  const list = document.getElementById('lfo-list');
-  if(!list) return;
-  list.innerHTML='';
-  lfoState.lfos.forEach(lfo=>{ list.appendChild(buildLfoRow(lfo)); });
-  // add btn state
-  const addBtn = document.getElementById('lfo-add-btn');
-  if(addBtn) addBtn.className='lfo-add-btn'+(lfoState.lfos.length>=LFO_MAX?' maxed':'');
-}
-
-function buildLfoRow(lfo){
-  const row=document.createElement('div');
-  row.className='lfo-row'+(lfo.active?' lfo-active':'');
-  row.id=`lfo-row-${lfo.id}`;
-
-  // ── WAVE SECTION ──
-  const waveSec=document.createElement('div');
-  waveSec.className='lfo-section wave';
-  const waveLbl=document.createElement('div');waveLbl.className='lfo-section-label';waveLbl.textContent='WAVE';
-  const waveBtns=document.createElement('div');waveBtns.className='wave-btns';
-  [
-    {k:'sin', svg:'<svg width="20" height="16" viewBox="0 0 20 16"><path d="M0,8 C3,8 3,2 5,2 S7,14 10,14 S13,2 15,2 S17,8 20,8" fill="none" stroke="#3d5070" stroke-width="1.5" stroke-linecap="round"/></svg>'},
-    {k:'tri', svg:'<svg width="20" height="16" viewBox="0 0 20 16"><polyline points="0,8 5,2 10,14 15,2 20,8" fill="none" stroke="#3d5070" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'},
-    {k:'sqr', svg:'<svg width="20" height="16" viewBox="0 0 20 16"><polyline points="0,8 0,2 10,2 10,14 20,14 20,8" fill="none" stroke="#3d5070" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'},
-  ].forEach(w=>{
-    const btn=document.createElement('button');
-    btn.className='wave-btn'+(lfo.wave===w.k?' on':'');
-    btn.innerHTML=w.svg;
-    btn.title=w.k.toUpperCase();
-    btn.onclick=()=>{lfo.wave=w.k;renderLfoList();};
-    waveBtns.appendChild(btn);
-  });
-  // Mini viz
-  const viz=document.createElement('div');viz.className='lfo-viz';viz.style.width='80px';
-  viz.innerHTML=`<svg viewBox="0 0 120 20" preserveAspectRatio="none"><polyline id="lfo-viz-path-${lfo.id}" points="" fill="none" stroke="#5cd0ff" stroke-width="1.5" opacity="0.7"/></svg>`;
-  waveSec.appendChild(waveLbl);waveSec.appendChild(waveBtns);waveSec.appendChild(viz);
-
-  // ── RATE SECTION ──
-  const rateSec=document.createElement('div');
-  rateSec.className='lfo-section rate';
-  const rateLbl=document.createElement('div');rateLbl.className='lfo-section-label';rateLbl.textContent='RATE';
-  const modeToggle=document.createElement('div');modeToggle.className='rate-mode-toggle';
-  ['bpm','knob'].forEach(m=>{
-    const b=document.createElement('button');
-    b.className='rate-mode-btn'+(lfo.rateMode===m?' on':'');
-    b.textContent=m.toUpperCase();
-    b.onclick=()=>{lfo.rateMode=m;renderLfoList();};
-    modeToggle.appendChild(b);
-  });
-  let rateControl;
-  if(lfo.rateMode==='bpm'){
-    rateControl=document.createElement('div');rateControl.className='rate-bpm-row';
-    const bm=document.createElement('button');bm.className='rate-stepper-btn';bm.textContent='−';
-    bm.onclick=()=>{lfo.bpmDivIdx=Math.max(0,lfo.bpmDivIdx-1);renderLfoList();};
-    const rv=document.createElement('span');rv.className='rate-val';rv.textContent=LFO_BPM_DIVS[lfo.bpmDivIdx];
-    const bp=document.createElement('button');bp.className='rate-stepper-btn';bp.textContent='+';
-    bp.onclick=()=>{lfo.bpmDivIdx=Math.min(LFO_BPM_DIVS.length-1,lfo.bpmDivIdx+1);renderLfoList();};
-    rateControl.appendChild(bm);rateControl.appendChild(rv);rateControl.appendChild(bp);
+  } else if (status === 0x90) {
+    label = 'NOTE ON  · midi=' + d1 + ' vel=' + d2;
+  } else if (status === 0x80) {
+    label = 'NOTE OFF · midi=' + d1;
+  } else if (status === 0xB0) {
+    label = 'CC · cc=' + d1 + ' val=' + d2;
+  } else if (status === 0xF8) {
+    label = 'CLOCK TICK';
+    labelClass = 'release';
+  } else if (status === 0xFA) {
+    label = 'START';
+  } else if (status === 0xFC) {
+    label = 'STOP';
+  } else if (status === 0xF0) {
+    label = 'SYSEX (' + bytes.length + ' bytes)';
   } else {
-    // Knob rate — draggable mini knob
-    rateControl=document.createElement('div');rateControl.style.display='flex';rateControl.style.alignItems='center';rateControl.style.gap='6px';
-    const kw=document.createElement('div');kw.className='rate-knob-wrap';
-    const angle=-135+lfo.knobRate/127*270;
-    kw.innerHTML=`<div class="rate-knob-outer"><div class="rate-knob-inner"><div class="rate-knob-notch" style="transform:rotate(${angle}deg)"><div class="rate-knob-dot"></div></div></div></div>`;
-    // Drag behavior
-    let dragging=false,startY=0,startVal=0;
-    kw.onmousedown=e=>{dragging=true;startY=e.clientY;startVal=lfo.knobRate;e.preventDefault();};
-    kw.ontouchstart=e=>{dragging=true;startY=e.touches[0].clientY;startVal=lfo.knobRate;};
-    const move=e=>{if(!dragging)return;const cy=e.touches?e.touches[0].clientY:e.clientY;lfo.knobRate=Math.max(0,Math.min(127,Math.round(startVal-(cy-startY)*0.8)));renderLfoList();};
-    const up=()=>{dragging=false;};
-    document.addEventListener('mousemove',move);document.addEventListener('mouseup',up);
-    document.addEventListener('touchmove',move);document.addEventListener('touchend',up);
-    const rv=document.createElement('span');rv.className='rate-val';rv.style.fontSize='10px';rv.textContent=lfo.knobRate;
-    rateControl.appendChild(kw);rateControl.appendChild(rv);
+    label = 'status=' + toHex(status);
   }
-  rateSec.appendChild(rateLbl);rateSec.appendChild(modeToggle);rateSec.appendChild(rateControl);
 
-  // ── DEPTH SECTION ──
-  const depthSec=document.createElement('div');
-  depthSec.className='lfo-section';depthSec.style.cssText='flex:0 0 auto;min-width:64px;';
-  const depthLbl=document.createElement('div');depthLbl.className='lfo-section-label';depthLbl.textContent='DEPTH';
-  const depthKnobWrap=document.createElement('div');depthKnobWrap.className='rate-knob-wrap';
-  const depthAngle=-135+(lfo.depth/127)*270;
-  depthKnobWrap.innerHTML=`<div class="rate-knob-outer"><div class="rate-knob-inner"><div class="rate-knob-notch" style="transform:rotate(${depthAngle}deg)"><div class="rate-knob-dot"></div></div></div></div>`;
-  const depthVal=document.createElement('span');depthVal.className='rate-val';depthVal.style.fontSize='10px';depthVal.textContent=lfo.depth;
-  // Drag
-  let dDragging=false,dStartY=0,dStartVal=0;
-  depthKnobWrap.onmousedown=e=>{dDragging=true;dStartY=e.clientY;dStartVal=lfo.depth;e.preventDefault();};
-  depthKnobWrap.ontouchstart=e=>{dDragging=true;dStartY=e.touches[0].clientY;dStartVal=lfo.depth;};
-  const dMove=e=>{
-    if(!dDragging)return;
-    const cy=e.touches?e.touches[0].clientY:e.clientY;
-    lfo.depth=Math.max(0,Math.min(127,Math.round(dStartVal-(cy-dStartY)*0.8)));
-    const a=-135+(lfo.depth/127)*270;
-    depthKnobWrap.querySelector('.rate-knob-notch').style.transform=`rotate(${a}deg)`;
-    depthVal.textContent=lfo.depth;
-  };
-  const dUp=()=>{dDragging=false;};
-  document.addEventListener('mousemove',dMove);document.addEventListener('mouseup',dUp);
-  document.addEventListener('touchmove',dMove);document.addEventListener('touchend',dUp);
-  depthSec.appendChild(depthLbl);depthSec.appendChild(depthKnobWrap);depthSec.appendChild(depthVal);
+  // Skip clock spam
+  if (status === 0xF8) return;
 
-  // ── TARGET SECTION ──
-  const targSec=document.createElement('div');
-  targSec.className='lfo-section target';
-  const targLbl=document.createElement('div');targLbl.className='lfo-section-label';targLbl.textContent='TARGET';
-  // Use a real <select> — reliable, no z-index/overflow issues
-  const targSelect=document.createElement('select');
-  targSelect.style.cssText='background:#0a0d14;border:1px solid #1c2a3a;border-radius:5px;color:#6e7480;font-family:Courier New,monospace;font-size:10px;font-weight:800;padding:5px 8px;cursor:pointer;outline:none;width:100%;letter-spacing:1px;';
-  const defOpt=document.createElement('option');
-  defOpt.value='';defOpt.textContent='SELECT...';defOpt.disabled=true;
-  if(lfo.target===null) defOpt.selected=true;
-  targSelect.appendChild(defOpt);
-  LFO_TARGETS.forEach((t,ti)=>{
-    const opt=document.createElement('option');
-    opt.value=ti;opt.textContent=t.label;
-    if(lfo.target===ti){opt.selected=true;targSelect.style.color='#3effb6';targSelect.style.borderColor='#3effb6';}
-    targSelect.appendChild(opt);
+  const logEl = document.getElementById('log');
+  // Remove placeholder
+  const empty = logEl.querySelector('.empty');
+  if (empty) empty.remove();
+
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML =
+    '<span class="log-ts">' + ts + '</span>' +
+    '<span class="log-hex">' + hexStr + '</span>' +
+    '<span class="log-dec">[' + decStr + ']</span>' +
+    '<span class="log-label ' + labelClass + '">' + label + '</span>';
+
+  logEl.appendChild(entry);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function clearLog() {
+  const logEl = document.getElementById('log');
+  logEl.innerHTML = '<div class="empty">log cleared — press buttons on TD-3…</div>';
+  startTime = performance.now();
+  captured.note = null; captured.tie = null; captured.rest = null;
+  document.getElementById('cap-note').textContent = '—';
+  document.getElementById('cap-tie').textContent = '—';
+  document.getElementById('cap-rest').textContent = '—';
+  ['cap-note','cap-tie','cap-rest'].forEach(id=>{
+    document.getElementById(id).classList.remove('set');
   });
-  targSelect.onchange=(e)=>{
-    const ti=parseInt(e.target.value);
-    lfo.target=ti;
-    targSelect.style.color='#3effb6';
-    targSelect.style.borderColor='#3effb6';
-    flash(`LFO ${lfo.id+1} → ${LFO_TARGETS[ti].label} · CC${LFO_TARGETS[ti].cc}`);
-  };
-  targSec.appendChild(targLbl);targSec.appendChild(targSelect);
-
-  // ── KILL BTN ──
-  const killBtn=document.createElement('button');
-  killBtn.className='lfo-kill-btn';killBtn.textContent='✕';killBtn.title='Remove LFO';
-  killBtn.onclick=()=>removeLfo(lfo.id);
-
-  row.appendChild(waveSec);row.appendChild(rateSec);row.appendChild(depthSec);row.appendChild(targSec);row.appendChild(killBtn);
-  return row;
 }
 
-// ── panel controls ────────────────────────────────────────────
-function toggleLfoPanel(){
-  lfoState.open=!lfoState.open;
-  const panel=document.getElementById('lfo-panel');
-  if(panel) panel.className='lfo-panel'+(lfoState.open?' open':'');
-  const btn=document.getElementById('lfo-toggle-btn');
-  if(btn){
-    btn.style.borderColor=lfoState.open?'#5cd0ff':'#5cd0ff44';
-    btn.style.background=lfoState.open?'#0a1c2c':'';
-    btn.style.boxShadow=lfoState.open?'0 0 8px #5cd0ff44':'';
-  }
-  if(lfoState.open && lfoState.lfos.length===0) addLfo();
+function connectInput() {
+  const sel = document.getElementById('input-select');
+  const id = sel.value;
+  if (!midiAccess) { alert('MIDI not ready — wait a moment and try again'); return; }
+  if (!id) { alert('Select an input device first'); return; }
+
+  // Detach old
+  if (activeInput) activeInput.onmidimessage = null;
+
+  activeInput = midiAccess.inputs.get(id);
+  if (!activeInput) { setStatus('Device not found', true); return; }
+
+  activeInput.onmidimessage = e => addLog(e.data);
+  setStatus('LISTENING · ' + activeInput.name, false);
 }
 
-function closeLfoPanel(){
-  lfoState.open=false;
-  const panel=document.getElementById('lfo-panel');
-  if(panel) panel.className='lfo-panel';
-  const btn=document.getElementById('lfo-toggle-btn');
-  if(btn){btn.style.borderColor='#5cd0ff44';btn.style.background='';btn.style.boxShadow='';}
+function setStatus(msg, err) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status' + (err ? ' err' : ' ok');
 }
 
-function addLfo(){
-  if(lfoState.lfos.length>=LFO_MAX){flash('MAX 3 LFOs');return;}
-  const lfo=makeLfo();
-  lfoState.lfos.push(lfo);
-  renderLfoList();
-  startLfo(lfo.id);
-  flash(`LFO ${lfoState.lfos.length} ADDED`);
+function populateInputs() {
+  if (!midiAccess) return;
+  const sel = document.getElementById('input-select');
+  sel.innerHTML = '<option value="">— select MIDI input —</option>';
+  midiAccess.inputs.forEach((inp, id) => {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = inp.name;
+    sel.appendChild(opt);
+  });
 }
-
-function removeLfo(id){
-  stopLfo(id);
-  lfoState.lfos=lfoState.lfos.filter(l=>l.id!==id);
-  delete _lfoLastTs[id];
-  renderLfoList();
-  flash('LFO REMOVED');
-}
-
-// Close any open target pickers when clicking outside
-document.addEventListener('click',()=>{
-  document.querySelectorAll('.target-picker.open').forEach(p=>p.classList.remove('open'));
-});
 
 // Init
-renderSeq();
-renderTransport();
-renderPatternsModal();
-initMidi();
-document.getElementById('modal-patterns').querySelector('.modal-card').onclick=e=>e.stopPropagation();
+if (!navigator.requestMIDIAccess) {
+  document.getElementById('status').textContent = 'NO WEB MIDI — use Chrome/Edge';
+  document.getElementById('status').className = 'status err';
+} else {
+  navigator.requestMIDIAccess({ sysex: true }).then(access => {
+    midiAccess = access;
+    populateInputs();
+    access.onstatechange = populateInputs;
+    setStatus('MIDI READY — select input', false);
+  }).catch(() => {
+    setStatus('MIDI ACCESS DENIED', true);
+  });
+}
 </script>
 </body>
 </html>
