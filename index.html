@@ -2312,7 +2312,7 @@ function genArp(closeAfter) {
   for(let i=len;i<16;i++){steps[i].gate='rest';steps[i].pitch=0;steps[i].octave=0;steps[i].accent=false;steps[i].slide=false;}
   renderSeq();
   if (closeAfter) genClose();
-  flash('ARP · ' + sc.toUpperCase() + ' · ' + chordCount + ' CHORD' + (chordCount>1?'S':''));
+  if (closeAfter) flash('ARP · ' + sc.toUpperCase() + ' · ' + chordCount + ' CHORD' + (chordCount>1?'S':''));
 }
 
 // ─── FIBONACCI / MATHEMATICAL GENERATOR ─────────────────────────────────────
@@ -2471,7 +2471,7 @@ function genFib(closeAfter) {
   for(let i=len;i<16;i++){steps[i].gate='rest';steps[i].pitch=0;steps[i].octave=0;steps[i].accent=false;steps[i].slide=false;}
   renderSeq();
   if (closeAfter) genClose();
-  flash('∑ MATH · ' + (GEN_EQUATION !== 'off' ? GEN_EQUATION.toUpperCase() : seqNames.slice(0,2).join('+').toUpperCase()) + ' · ' + GEN_SCALE.toUpperCase());
+  if (closeAfter) flash('∑ MATH · ' + (GEN_EQUATION !== 'off' ? GEN_EQUATION.toUpperCase() : seqNames.slice(0,2).join('+').toUpperCase()) + ' · ' + GEN_SCALE.toUpperCase());
 }
 
 // ─── BASS GENERATOR ──────────────────────────────────────────────────────────
@@ -2647,7 +2647,7 @@ function genBass(closeAfter) {
   renderSeq();
   if (closeAfter) genClose();
   const flavour = pool === REPT_CELLS ? 'REPT' : cMod < 0.3 ? 'SPARSE' : cMod < 0.6 ? 'GROOVE' : pool === PUMP_CELLS ? 'PUMP' : 'SYNCO';
-  flash('BASS · ' + flavour + ' · ' + GEN_SCALE.toUpperCase());
+  if (closeAfter) flash('BASS · ' + flavour + ' · ' + GEN_SCALE.toUpperCase());
 }
 
 function genBlend(names) {
@@ -2701,7 +2701,7 @@ function genRunCore(closeAfter) {
   for(let i=len;i<16;i++){steps[i].gate='rest';steps[i].pitch=0;steps[i].octave=0;steps[i].accent=false;steps[i].slide=false;}
   renderSeq();
   if (closeAfter) genClose();
-  flash('GENERATED · '+active.join('+').toUpperCase()+' · '+GEN_SCALE.toUpperCase()+(GEN_EQUATION!=='off'?' · EQ:'+GEN_EQUATION.toUpperCase():''));
+  if (closeAfter) flash('GENERATED · '+active.join('+').toUpperCase()+' · '+GEN_SCALE.toUpperCase()+(GEN_EQUATION!=='off'?' · EQ:'+GEN_EQUATION.toUpperCase():''));
 }
 
 </script>
