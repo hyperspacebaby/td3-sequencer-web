@@ -2076,19 +2076,27 @@ const GEN_TABLES = {
   techno: { intervals:[0,0,0,0,0,0,7,7,12,5,3,10],             gateBias:[1.0,0.2,0.3,0.2,0.85,0.15,0.25,0.2,0.85,0.2,0.3,0.15,0.8,0.15,0.25,0.2], tieBias:0.10, restBias:0.45, octaveDown:0.10, octaveUp:0.05 },
   goa:    { intervals:[0,0,0,0,0,1,1,4,4,7,7,7,8,8,10,12],    gateBias:[1.0,0.7,0.85,0.6,0.9,0.5,0.75,0.4,0.85,0.55,0.7,0.45,0.8,0.5,0.65,0.35], tieBias:0.30, restBias:0.12, octaveDown:0.18, octaveUp:0.08 }
 };
-const GEN_STYLES = { acid:true, funk:true, techno:true, goa:false };
+const GEN_STYLES = { acid:true, funk:true, techno:true, goa:false, arp:false };
 
 function genStyle(s) {
-  GEN_STYLES[s] = !GEN_STYLES[s];
-  if (!Object.values(GEN_STYLES).some(v=>v)) GEN_STYLES[s] = true;
+  // ARP is exclusive — it has its own generator path
+  if (s === 'arp') {
+    const wasOn = GEN_STYLES.arp;
+    Object.keys(GEN_STYLES).forEach(k => GEN_STYLES[k] = false);
+    GEN_STYLES.arp = !wasOn;
+    if (!GEN_STYLES.arp) GEN_STYLES.acid = true; // fallback
+  } else {
+    GEN_STYLES.arp = false;
+    GEN_STYLES[s] = !GEN_STYLES[s];
+    if (!Object.values(GEN_STYLES).some(v=>v)) GEN_STYLES[s] = true;
+  }
   document.getElementById('gs-acid').className   = 'gs'+(GEN_STYLES.acid   ?' on':'');
   document.getElementById('gs-funk').className   = 'gs'+(GEN_STYLES.funk   ?' on':'');
   document.getElementById('gs-techno').className = 'gs'+(GEN_STYLES.techno ?' on':'');
   document.getElementById('gs-goa').className    = 'gs'+(GEN_STYLES.goa    ?' on':'');
+  document.getElementById('gs-arp').className    = 'gs'+(GEN_STYLES.arp    ?' on':'');
 }
 function genOpen()  {
-  const sl = document.getElementById('gen-variation');
-  if (sl) { sl.value = 1; document.getElementById('gv-variation').textContent = '–'; }
   document.getElementById('gen-overlay').style.display='flex';
 }
 function genClose() { document.getElementById('gen-overlay').style.display='none'; }
@@ -2120,6 +2128,112 @@ function genVariation(val) {
   Math.random = orig;
 }
 
+// ─── ARP GENERATOR ───────────────────────────────────────────────────────────
+// Builds melodic arpeggio progressions from chords derived from the current scale.
+// Chord tones are spread across the pattern in musical shapes (up, down, updown, skip).
+
+const ARP_CHORDS = {
+  // chord = [root offset, 3rd offset, 5th offset, optional 7th offset] — all semitones from root
+  major:     { triads:[[0,4,7],[5,9,12],[7,11,14],[2,5,9]],     seventh:[[0,4,7,11],[5,9,12,16],[7,11,14,17]] },
+  minor:     { triads:[[0,3,7],[5,8,12],[7,10,14],[2,5,8]],     seventh:[[0,3,7,10],[5,8,12,15],[7,10,14,17]] },
+  hijaz:     { triads:[[0,4,7],[1,5,8],[5,8,12],[7,11,14]],     seventh:[[0,4,7,10],[1,5,8,12],[5,8,12,15]]  },
+  penta:     { triads:[[0,3,7],[5,10,15],[3,7,10],[7,12,15]],   seventh:[[0,3,7,10],[5,10,15,17]]            },
+  goa:       { triads:[[0,4,7],[1,4,8],[5,8,12],[7,11,14]],     seventh:[[0,4,7,10],[1,4,8,11],[5,8,12,15]] },
+  chromatic: { triads:[[0,4,7],[0,3,7],[0,4,8],[5,9,12]],       seventh:[[0,4,7,11],[0,3,7,10],[0,4,8,11]]  },
+};
+
+const ARP_SHAPES = {
+  up:     tones => [...tones],
+  down:   tones => [...tones].reverse(),
+  updown: tones => [...tones, ...[...tones].reverse().slice(1,-1)],
+  skip:   tones => { const r=[]; tones.forEach((t,i)=>{ r.push(t); if(i<tones.length-1) r.push(tones[i+1]); }); return r; },
+  random: tones => [...tones].sort(()=>Math.random()-0.5),
+  inside: tones => { const s=[...tones]; const m=s.splice(1,1)[0]; return [m,...s]; },
+};
+
+function genArp(closeAfter) {
+  const density = parseInt(document.getElementById('gen-density').value);
+  const slideP  = parseInt(document.getElementById('gen-slide').value);
+  const accentP = parseInt(document.getElementById('gen-accent').value);
+  const chaos   = parseInt(document.getElementById('gen-chaos').value);
+  const len     = state.pattern.length;
+  const steps   = state.pattern.steps;
+  const sc      = GEN_SCALE;
+  const chordDef = ARP_CHORDS[sc] || ARP_CHORDS.minor;
+
+  // Choose how many chords fill the pattern (1, 2, or 4)
+  const chordCount = chaos > 6 ? 4 : chaos > 3 ? 2 : 1;
+  const stepsPerChord = Math.floor(len / chordCount);
+
+  // Pick chord pool — use seventh chords for more colour when density is high
+  const useSevenths = density >= 7;
+  const pool = useSevenths ? chordDef.seventh : chordDef.triads;
+
+  // Shape names weighted by chaos
+  const shapeNames = chaos > 7
+    ? ['random','skip','inside','updown']
+    : chaos > 4
+    ? ['up','updown','skip','down']
+    : ['up','updown','up','down'];
+
+  // Octave spread: higher density = wider range
+  const octaveSpread = density >= 8 ? 2 : density >= 5 ? 1 : 0;
+
+  let pos = 0;
+  for (let c = 0; c < chordCount; c++) {
+    const chord   = pool[Math.floor(Math.random() * pool.length)];
+    const shapeName = shapeNames[Math.floor(Math.random() * shapeNames.length)];
+    const shapeFn = ARP_SHAPES[shapeName] || ARP_SHAPES.up;
+
+    // Build tone list with octave spread
+    let tones = chord.map(t => ({ pitch: t % 12, octave: Math.floor(t / 12) }));
+    if (octaveSpread >= 1) {
+      // Double the tones one octave up for wider melodic range
+      tones = [...tones, ...tones.map(t => ({ pitch: t.pitch, octave: t.octave + 1 }))];
+    }
+    if (octaveSpread >= 2) {
+      tones = [...tones, ...tones.slice(0, chord.length).map(t => ({ pitch: t.pitch, octave: t.octave + 2 }))];
+    }
+
+    // Apply shape to get step sequence of tones
+    const shaped = shapeFn(tones);
+    const end = (c === chordCount - 1) ? len : pos + stepsPerChord;
+
+    for (let i = pos; i < end && i < len; i++) {
+      const s = steps[i];
+      const toneIdx = (i - pos) % shaped.length;
+      const tone = shaped[toneIdx];
+
+      // Sparse rests based on density: density=1 → ~75% rests, density=10 → ~5% rests
+      const restChance = 0.75 - (density - 1) / 9 * 0.70;
+      if (Math.random() < restChance) {
+        s.gate='rest'; s.pitch=0; s.octave=0; s.accent=false; s.slide=false;
+        continue;
+      }
+
+      // Occasional tie for legato feel
+      if (i > pos && steps[i-1].gate === 'on' && Math.random() < 0.12) {
+        s.gate='tie'; s.pitch=0; s.octave=0; s.accent=false; s.slide=false;
+        continue;
+      }
+
+      s.gate   = 'on';
+      s.pitch  = tone.pitch;
+      s.octave = Math.min(1, Math.max(-1, tone.octave - 1)); // centre around mid octave
+      // Accent on beat 1 of each chord and occasionally elsewhere
+      s.accent = (i === pos) || Math.random() < (accentP / 10) * 0.4;
+      // Slide: higher on arps for legato melodic feel
+      s.slide  = (i < len - 1) && Math.random() < (slideP / 10) * 0.65;
+    }
+    pos = end;
+  }
+
+  for(let i=len;i<16;i++){steps[i].gate='rest';steps[i].pitch=0;steps[i].octave=0;steps[i].accent=false;steps[i].slide=false;}
+  renderSeq();
+  if (closeAfter) genClose();
+  flash('ARP · ' + sc.toUpperCase() + ' · ' + chordCount + ' CHORD' + (chordCount>1?'S':''));
+}
+
 function genBlend(names) {
   const b={intervals:[],gateBias:Array(16).fill(0),tieBias:0,restBias:0,octaveDown:0,octaveUp:0};
   names.forEach(n=>{
@@ -2135,6 +2249,7 @@ function genBlend(names) {
 function genRun() { genRunCore(true); }
 
 function genRunCore(closeAfter) {
+  if (GEN_STYLES.arp) { genArp(closeAfter); return; }
   const density = parseInt(document.getElementById('gen-density').value);
   const chaos   = parseInt(document.getElementById('gen-chaos').value);
   const slideP  = parseInt(document.getElementById('gen-slide').value);
@@ -2143,7 +2258,7 @@ function genRunCore(closeAfter) {
   const tbl     = genBlend(active);
   const len     = state.pattern.length;
   const steps   = state.pattern.steps;
-  const dMod    = 1-((density-1)/9)*0.7;
+  const dMod    = 1 + ((10 - density) / 9) * 2.5; // density=1 → dMod=3.5 (lots of rests), density=10 → dMod=1
   const cMod    = (chaos-1)/9;
 
   for(let i=0;i<len;i++){
@@ -2177,6 +2292,7 @@ function genRunCore(closeAfter) {
       <button class="gs on" id="gs-funk"   onclick="genStyle('funk')"  >FUNK</button>
       <button class="gs on" id="gs-techno" onclick="genStyle('techno')">TECHNO</button>
       <button class="gs"    id="gs-goa"    onclick="genStyle('goa')"   >GOA</button>
+      <button class="gs"    id="gs-arp"    onclick="genStyle('arp')"   >ARP</button>
     </div>
     <div class="gen-row">
       <span class="gen-lbl">SCALE</span>
@@ -2206,11 +2322,6 @@ function genRunCore(closeAfter) {
       <span class="gen-lbl">ACCENT</span>
       <input class="gen-slider" type="range" id="gen-accent" min="0" max="10" value="4" oninput="document.getElementById('gv-accent').textContent=this.value">
       <span class="gen-val" id="gv-accent">4</span>
-    </div>
-    <div class="gen-row">
-      <span class="gen-lbl">VARIATION</span>
-      <input class="gen-slider" type="range" id="gen-variation" min="1" max="64" value="1" oninput="genVariation(this.value)">
-      <span class="gen-val" id="gv-variation" style="min-width:28px">–</span>
     </div>
     <div class="gen-btns">
       <button class="gen-go"    onclick="genRun()">⚡ GENERATE</button>
