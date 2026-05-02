@@ -17,10 +17,11 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 .midi-fx-label{font-size:8px;font-weight:700;letter-spacing:1px;color:#1b1d22;position:relative}
 .mode-buttons{display:flex;gap:5px;flex-wrap:wrap}
 .mode-btn{padding:6px 9px;border-radius:6px;background:#0e1014;border:1px solid #2a2d34;font-family:'Courier New',monospace;font-size:9px;font-weight:700;letter-spacing:1.2px;color:#6e7480;cursor:pointer;transition:all 0.15s}
+.mode-btn-persist{padding:6px 9px;border-radius:6px;background:#0e1014;border:1px solid #2a2d34;font-family:'Courier New',monospace;font-size:9px;font-weight:700;letter-spacing:1.2px;color:#6e7480;cursor:pointer;transition:all 0.15s}
 .mode-btn.active{border-color:#5cd0ff;background:#0e1a26;color:#9be4ff;box-shadow:0 0 6px #5cd0ff88}
-.mode-btn.variation-auto{border-color:#ffd86e;background:#1a1500;color:#ffe89a;box-shadow:0 0 8px #ffd86e88;animation:variation-pulse 1s ease-in-out infinite}
-@keyframes variation-pulse{0%,100%{box-shadow:0 0 5px #ffd86e55}50%{box-shadow:0 0 13px #ffd86ecc}}
-.mode-btn.hallucinate-on{border-color:#c084fc;background:#1a0e2e;color:#e0aaff;box-shadow:0 0 8px #c084fc88;animation:hallucinate-pulse 1.4s ease-in-out infinite}
+.mode-btn.hallucinate-on,.mode-btn-persist.hallucinate-on{border-color:#c084fc;background:#1a0e2e;color:#e0aaff;box-shadow:0 0 8px #c084fc88;animation:hallucinate-pulse 1.4s ease-in-out infinite}
+.mode-btn-persist.variation-on{border-color:#ffb04a;background:#1e1200;color:#ffd08a;box-shadow:0 0 8px #ffb04a88;animation:variation-pulse 1.4s ease-in-out infinite}
+@keyframes variation-pulse{0%,100%{box-shadow:0 0 6px #ffb04a66}50%{box-shadow:0 0 14px #ffb04acc}}
 @keyframes hallucinate-pulse{0%,100%{box-shadow:0 0 6px #c084fc66}50%{box-shadow:0 0 14px #c084fccc}}
 .metal-spacer{flex:1}
 .status-col{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
@@ -70,29 +71,23 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 .cell.beat{border-color:#1e2738}
 .cell.beyond{opacity:0.25}
 .cell.playhead{border-color:#5cd0ff;background:#101e2c}
+/* Normal step: solid cyan #5cd0ff, no border fuss */
 .cell.lit{background:#5cd0ff;border-color:#5cd0ff}
-.cell.lit.accent{background:#a8e8ff;border-color:#ffffff;border-width:2px;box-shadow:0 0 6px #ffffffaa}
-.cell-inner{width:65%;height:55%;border-radius:2px;background:#5cd0ff;display:none}
-.cell.lit .cell-inner{display:block}
-.cell.lit.accent .cell-inner{background:#5cd0ff}
-/* Multi-step note bar — grid stays 100% aligned, visual merge via box-shadow */
-/* Head: lit normally, but extend a shadow rightward to cover the 2px gap */
-/* Long notes: warm teal — clearly distinct from regular (cold blue-grey) notes,
-   readable on dark bg. Head is brightest (note onset), body/tail slightly darker. */
-.cell.note-head{background:#1a3a5c;border-color:#2a5a8c;border-radius:3px;
-  box-shadow:2px 0 0 0 #1a3a5c;}
-.cell.note-head.accent{background:#5cd0ff;border-color:#9be4ff;box-shadow:2px 0 0 0 #5cd0ff;}
-/* Body */
-.cell.note-body{background:#142840;border-color:#142840;border-radius:0;
-  box-shadow:-2px 0 0 0 #142840, 2px 0 0 0 #142840;}
-.cell.note-body.accent{background:#3a90cc;border-color:#3a90cc;
-  box-shadow:-2px 0 0 0 #3a90cc, 2px 0 0 0 #3a90cc;}
-/* Tail */
-.cell.note-tail{background:#142840;border-color:#142840;border-radius:3px;
-  box-shadow:-2px 0 0 0 #142840;}
-.cell.note-tail.accent{background:#3a90cc;border-color:#3a90cc;
-  box-shadow:-2px 0 0 0 #3a90cc;}
-/* Suppress dot on body/tail */
+/* Accent step: bright light cyan, clearly lit up but not white */
+.cell.lit.accent{background:#c8f0ff;border-color:#c8f0ff;box-shadow:0 0 9px #5cd0ffaa}
+.cell-inner{display:none}
+/* Long note bar — dark blue, visual merge via box-shadow */
+.cell.note-head{background:#1a3a6e;border-color:#2a5aaa;border-radius:3px;
+  box-shadow:2px 0 0 0 #1a3a6e;}
+.cell.note-head.accent{background:#1e4a8a;border-color:#3a6acc;box-shadow:2px 0 0 0 #1e4a8a,0 0 6px #2a5aaa55;}
+.cell.note-body{background:#142e58;border-color:#142e58;border-radius:0;
+  box-shadow:-2px 0 0 0 #142e58, 2px 0 0 0 #142e58;}
+.cell.note-body.accent{background:#183468;border-color:#183468;
+  box-shadow:-2px 0 0 0 #183468, 2px 0 0 0 #183468;}
+.cell.note-tail{background:#142e58;border-color:#142e58;border-radius:3px;
+  box-shadow:-2px 0 0 0 #142e58;}
+.cell.note-tail.accent{background:#183468;border-color:#183468;
+  box-shadow:-2px 0 0 0 #183468;}
 .cell.note-body .cell-inner,.cell.note-tail .cell-inner{display:none}
 
 /* LANES */
@@ -230,8 +225,8 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
     <button class="mode-btn" id="btn-reverse" data-mode="reverse" onclick="applyMode('reverse')">REVERSE</button>
     <button class="mode-btn" id="btn-weave" data-mode="weave" onclick="applyMode('weave')">WEAVE</button>
     <button class="mode-btn" id="btn-octflip" data-mode="octflip" onclick="applyMode('octflip')">OCT FLIP</button>
-    <button class="mode-btn" id="btn-nudge" title="Tap: one variation · Hold: auto per bar" onpointerdown="variationPointerDown()" onpointerup="variationPointerUp()" onpointerleave="variationPointerUp()">VARIATION</button>
-    <button class="mode-btn" id="btn-hallucinate" onclick="toggleHallucinate()" title="Generate a new pattern each end of bar">✦ HALLUCINATE</button>
+    <button class="mode-btn-persist" id="btn-nudge" onmousedown="variationDown()" onmouseup="variationUp()" onmouseleave="variationUp()" ontouchstart="variationDown()" ontouchend="variationUp()" title="Click: instant variation · Hold: auto-vary each bar">VARIATION</button>
+    <button class="mode-btn-persist" id="btn-hallucinate" onclick="toggleHallucinate()" title="Generate a new pattern each end of bar">✦ HALLUCINATE</button>
   </div>
   <div class="metal-spacer"></div>
   <div class="status-col">
@@ -328,7 +323,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
       <span style="font-size:7px;font-weight:900;letter-spacing:1px;color:#3d4f68;white-space:nowrap">VAR</span>
       <input type="range" id="footer-variation" min="1" max="64" value="1"
         title="Scrub for a new variation"
-        style="-webkit-appearance:none;appearance:none;width:90px;height:4px;border-radius:2px;background:#1c2a40;outline:none;cursor:pointer;border:none"
+        style="-webkit-appearance:none;appearance:none;width:44px;height:4px;border-radius:2px;background:#1c2a40;outline:none;cursor:pointer;border:none"
         oninput="footerVariation(this.value)">
     </div>
   </div>
@@ -396,9 +391,7 @@ let state = {
   stepRef:0, dirRef:1, intervalId:null,
   invertPhase:0,
   hallucinate:false,
-  hallucinateStepCount:0,
-  variationAuto:false,
-  variationAutoStepCount:0,
+  variationOn:false,
   slideTime: 64,          // CC#5 Portamento Time sent to TD-3 (0-127)
   // MIDI clock reception
   clockMode:false,
@@ -596,8 +589,7 @@ function onMidiClockMessage(e) {
       const prev = state.stepRef;
       state.stepRef = nextIndex(state.stepRef, len);
       state.currentStep = state.stepRef;
-      hallucinateCheck();
-      variationAutoCheck();
+      hallucinateCheck(prev, state.stepRef);
       playStep(state.stepRef);
       renderStepHighlight();
     }
@@ -648,16 +640,15 @@ function swingDelayMs(stepIdx){
 
 function scheduleNextStep(){
   if(!state.isPlaying || state.clockMode) return;
-  const len   = Math.max(1, state.pattern.length);
-  const delay = swingDelayMs(state.stepRef);
+  const len = Math.max(1, state.pattern.length);
+  const next = nextIndex(state.stepRef, len);
+  const delay = swingDelayMs(state.stepRef); // delay until next step = current step's duration
   state.intervalId = setTimeout(()=>{
     if(!state.isPlaying) return;
-    // nextIndex called here — inside the tick — so invert/bounce phase
-    // mutations happen exactly once per played step, no double-advance.
-    state.stepRef    = nextIndex(state.stepRef, len);
+    const prev = state.stepRef;
+    state.stepRef = next;
     state.currentStep = state.stepRef;
-    hallucinateCheck();
-    variationAutoCheck();
+    hallucinateCheck(prev, state.stepRef);
     playStep(state.stepRef);
     renderStepHighlight();
     scheduleNextStep();
@@ -762,8 +753,6 @@ function startSeq(){
     state.stepRef = 0;
   }
   state.invertPhase = 0;
-  state.hallucinateStepCount = 0;
-  state.variationAutoStepCount = 0;
   state.isPlaying = true;
   state.currentStep = state.stepRef;
   playStep(state.stepRef);
@@ -860,20 +849,6 @@ function toggleSlide(i){updateStep(i,{slide:!state.pattern.steps[i].slide});}
 
 
 
-// Safely update mode-btn classes without clobbering persistent state badges
-// (variation-auto, hallucinate-on must survive mode switches)
-function setModeBtnActive(activePredicate) {
-  document.querySelectorAll('.mode-btn').forEach(b => {
-    const isActive   = activePredicate(b);
-    const isVarAuto  = b.id === 'btn-nudge'       && state.variationAuto;
-    const isHalluc   = b.id === 'btn-hallucinate' && state.hallucinate;
-    b.className = 'mode-btn'
-      + (isActive  ? ' active'         : '')
-      + (isVarAuto ? ' variation-auto' : '')
-      + (isHalluc  ? ' hallucinate-on' : '');
-  });
-}
-
 function applyMode(m){
   const angles = {forward:-45, bounce:0, reverse:45, random:135, invert:-135, weave:-90};
 
@@ -889,7 +864,9 @@ function applyMode(m){
     }
     const fwd = document.getElementById('btn-forward');
     fwd.textContent = state.dirRef === 1 ? '▶ FWD' : '◀ FWD';
-    setModeBtnActive(b => b.dataset.mode === 'forward');
+    document.querySelectorAll('.mode-btn').forEach(b=>{
+      b.className = 'mode-btn' + (b.dataset.mode === 'forward' ? ' active' : '');
+    });
     document.getElementById('knob-notch').style.transform = `rotate(${angles.forward}deg)`;
     flash(state.dirRef === 1 ? 'FWD →' : '← FWD');
     return;
@@ -899,7 +876,9 @@ function applyMode(m){
   if(m === 'bounce'){
     state.mode = 'bounce';
     state.dirRef = 1;
-    setModeBtnActive(b => b.dataset.mode === 'bounce');
+    document.querySelectorAll('.mode-btn').forEach(b=>{
+      b.className = 'mode-btn' + (b.dataset.mode === 'bounce' ? ' active' : '');
+    });
     document.getElementById('knob-notch').style.transform = `rotate(${angles.bounce}deg)`;
     flash('BOUNCE ⇄');
     return;
@@ -915,7 +894,9 @@ function applyMode(m){
     renderSeq();
     flash('REVERSE · notes flipped');
     // Visually highlight REVERSE briefly then restore
-    setModeBtnActive(b => b.dataset.mode === state.mode);
+    document.querySelectorAll('.mode-btn').forEach(b=>{
+      b.className = 'mode-btn' + (b.dataset.mode === state.mode ? ' active' : '');
+    });
     const revBtn = document.getElementById('btn-reverse');
     revBtn.classList.add('active');
     setTimeout(()=>{ revBtn.classList.remove('active'); }, 400);
@@ -934,7 +915,9 @@ function applyMode(m){
     state.mode = 'random';
     state.dirRef = 1;
     renderSeq();
-    setModeBtnActive(b => b.dataset.mode === 'random');
+    document.querySelectorAll('.mode-btn').forEach(b=>{
+      b.className = 'mode-btn' + (b.dataset.mode === 'random' ? ' active' : '');
+    });
     document.getElementById('knob-notch').style.transform = `rotate(${angles.random}deg)`;
     flash('RANDOM · shuffled');
     return;
@@ -945,7 +928,9 @@ function applyMode(m){
     state.mode = 'invert';
     state.invertPhase = 0;
     state.dirRef = 1;
-    setModeBtnActive(b => b.dataset.mode === 'invert');
+    document.querySelectorAll('.mode-btn').forEach(b=>{
+      b.className = 'mode-btn' + (b.dataset.mode === 'invert' ? ' active' : '');
+    });
     document.getElementById('knob-notch').style.transform = `rotate(${angles.invert}deg)`;
     flash('INVERT · skip+back');
     return;
@@ -982,7 +967,9 @@ function applyMode(m){
     flash('WEAVE · invert baked → FWD');
 
     // Stay in whatever playback mode we were in — just flash WEAVE briefly
-    setModeBtnActive(b => b.dataset.mode === state.mode);
+    document.querySelectorAll('.mode-btn').forEach(b=>{
+      b.className = 'mode-btn' + (b.dataset.mode === state.mode ? ' active' : '');
+    });
     const weaveBtn = document.getElementById('btn-weave');
     weaveBtn.classList.add('active');
     setTimeout(() => { weaveBtn.classList.remove('active'); }, 400);
@@ -1023,7 +1010,9 @@ function applyMode(m){
     renderSeq();
     flash('OCT FLIP · pitches mirrored');
 
-    setModeBtnActive(b => b.dataset.mode === state.mode);
+    document.querySelectorAll('.mode-btn').forEach(b=>{
+      b.className = 'mode-btn' + (b.dataset.mode === state.mode ? ' active' : '');
+    });
     const octBtn = document.getElementById('btn-octflip');
     octBtn.classList.add('active');
     setTimeout(() => { octBtn.classList.remove('active'); }, 400);
@@ -1370,100 +1359,62 @@ function transposePattern(delta) {
 }
 
 // ── NUDGE VARIATION ───────────────────────────────────────────────────────────
-// Mutates the current pattern guided by all gen panel parameters:
-//   density  → how many steps get touched (low=few, high=many)
-//   chaos    → how dramatic each change is (low=subtle, high=bold leaps/octave flips)
-//   accent   → probability weight for accent mutations
-//   slide    → probability weight for slide mutations
-//   scale    → all pitches stay snapped to current scale
-function nudgeVariation() {
+// Lightly mutates the current pattern: tweaks pitch/accent/slide on a handful
+// of steps while keeping all notes snapped to the current GEN_SCALE.
+// Shared nudge logic — called on instant click and on each bar-end in auto mode
+function applyVariationNudge() {
+  const accentP = parseInt(document.getElementById('gen-accent').value);
+  const slideP  = parseInt(document.getElementById('gen-slide').value);
+  const sc      = SCALES[GEN_SCALE] || SCALES.minor;
   const steps   = state.pattern.steps;
   const len     = state.pattern.length;
-  const sc      = SCALES[GEN_SCALE] || SCALES.minor;
-
-  // Read gen panel — fall back gracefully if panel not yet in DOM
-  const density = parseInt(document.getElementById('gen-density')?.value ?? 5);
-  const chaos   = parseInt(document.getElementById('gen-chaos')?.value   ?? 4);
-  const slideP  = parseInt(document.getElementById('gen-slide')?.value   ?? 4);
-  const accentP = parseInt(document.getElementById('gen-accent')?.value  ?? 4);
-
-  // density 1-10 → touchProb 0.15–0.55 (low density = fewer steps touched)
-  const touchProb  = 0.15 + (density - 1) / 9 * 0.40;
-  // chaos 1-10 → boldness 0.0–1.0 (controls leap size, octave chance)
-  const boldness   = (chaos - 1) / 9;
-  // slide/accent sliders map to their mutation probability
-  const slideProb  = (slideP  / 10) * 0.60;
-  const accentProb = (accentP / 10) * 0.60;
-
   for (let i = 0; i < len; i++) {
     const s = steps[i];
-    if (s.gate !== 'on') continue;
-    if (Math.random() > touchProb) continue;
-
+    if (s.gate !== 'on' || Math.random() > 0.30) continue;
     const roll = Math.random();
-
-    if (roll < 0.45) {
-      // ── PITCH: adjacent scale degree. High chaos allows bigger jumps (2 degrees)
-      const idx  = sc.reduce((bi, v, ci) =>
-        Math.abs(v - s.pitch) < Math.abs(sc[bi] - s.pitch) ? ci : bi, 0);
-      const leap  = (boldness > 0.6 && Math.random() < boldness * 0.5) ? 2 : 1;
-      const dir   = Math.random() < 0.5 ? -1 : 1;
-      const nIdx  = Math.max(0, Math.min(sc.length - 1, idx + dir * leap));
-      s.pitch = sc[nIdx];
-      if (GEN_SCALE === 'goa' && Math.random() < GOA_BEND_CHANCE) {
-        s.pitch = (s.pitch + (Math.random() < 0.5 ? -1 : 1) + 12) % 12;
-      }
-
-    } else if (roll < 0.45 + accentProb * 0.30) {
-      // ── ACCENT: weighted by accent slider
-      s.accent = !s.accent;
-
-    } else if (roll < 0.45 + accentProb * 0.30 + slideProb * 0.25 && i < len - 1) {
-      // ── SLIDE: weighted by slide slider
-      s.slide = !s.slide;
-
+    if (roll < 0.50) {
+      const idx = sc.indexOf(sc.reduce((b,v)=>Math.abs(v-s.pitch)<Math.abs(b-s.pitch)?v:b,sc[0]));
+      s.pitch = sc[Math.max(0, Math.min(sc.length-1, idx + (Math.random()<0.5?-1:1)))];
+    } else if (roll < 0.72) {
+      s.accent = Math.random() < (accentP/10)*0.8;
+    } else if (roll < 0.88 && i < len-1) {
+      s.slide = Math.random() < (slideP/10)*0.6;
     } else {
-      // ── OCTAVE: only at mid-to-high chaos; larger chaos = wider range allowed
-      if (boldness > 0.3) {
-        const maxOct = boldness > 0.7 ? 1 : 0;
-        s.octave = Math.max(-1, Math.min(maxOct, s.octave + (Math.random() < 0.5 ? -1 : 1)));
-      }
+      s.octave = Math.max(-1, Math.min(1, s.octave + (Math.random()<0.5?-1:1)));
     }
   }
   renderSeq();
-  if (!state.variationAuto) flash('VARIATION · ' + GEN_SCALE.toUpperCase());
 }
 
-// ── VARIATION HOLD MODE ───────────────────────────────────────────────────────
-// Tap = one variation. Hold >320ms = latch into auto-variation (fires each bar).
 let _varHoldTimer = null;
-let _varHoldFired = false;
 
-function variationPointerDown() {
-  _varHoldFired = false;
+function variationDown() {
+  // Start hold timer — if held 400ms, toggle auto mode
   _varHoldTimer = setTimeout(() => {
-    _varHoldFired = true;
-    state.variationAuto = !state.variationAuto;
-    state.variationAutoStepCount = 0;
+    _varHoldTimer = null; // held — toggle auto mode
+    state.variationOn = !state.variationOn;
     const btn = document.getElementById('btn-nudge');
-    if (state.variationAuto) {
-      btn.classList.add('variation-auto');
-      flash('VARIATION · AUTO · ON');
+    if (state.variationOn) {
+      btn.classList.add('variation-on');
+      flash('VARIATION · AUTO · ' + GEN_SCALE.toUpperCase());
     } else {
-      btn.classList.remove('variation-auto');
-      flash('VARIATION · AUTO · OFF');
+      btn.classList.remove('variation-on');
+      flash('VARIATION · AUTO OFF');
     }
-  }, 320);
+  }, 400);
 }
 
-function variationPointerUp() {
-  clearTimeout(_varHoldTimer);
-  _varHoldTimer = null;
-  if (!_varHoldFired) {
-    nudgeVariation(); // tap: fire once immediately
+function variationUp() {
+  if (_varHoldTimer !== null) {
+    // Released before 400ms = instant single nudge
+    clearTimeout(_varHoldTimer);
+    _varHoldTimer = null;
+    applyVariationNudge();
+    flash('VARIATION · ' + GEN_SCALE.toUpperCase());
   }
-  _varHoldFired = false;
 }
+
+function nudgeVariation() {} // kept for compatibility
 
 function toggleHallucinate() {
   state.hallucinate = !state.hallucinate;
@@ -1477,25 +1428,14 @@ function toggleHallucinate() {
   }
 }
 
-// Counter-based bar detection — immune to mode changes and UI interaction.
-// Counts raw step advances; fires at each multiple of pattern.length.
-function hallucinateCheck() {
-  if (!state.hallucinate) return;
-  state.hallucinateStepCount++;
-  const len = Math.max(1, state.pattern.length);
-  if (state.hallucinateStepCount >= len) {
-    state.hallucinateStepCount = 0;
+function hallucinateCheck(prevStep, nextStep) {
+  const len = state.pattern.length;
+  const wrapped = (nextStep === 0) || (nextStep < prevStep && state.mode !== 'bounce' && state.mode !== 'invert');
+  if (!wrapped) return;
+  if (state.hallucinate) {
     genRunCore(false);
-  }
-}
-
-function variationAutoCheck() {
-  if (!state.variationAuto) return;
-  state.variationAutoStepCount++;
-  const len = Math.max(1, state.pattern.length);
-  if (state.variationAutoStepCount >= len) {
-    state.variationAutoStepCount = 0;
-    nudgeVariation();
+  } else if (state.variationOn) {
+    applyVariationNudge();
   }
 }
 
@@ -2186,8 +2126,13 @@ const GEN_TABLES = {
   goa:    { intervals:[0,0,0,0,0,1,1,4,4,7,7,7,8,8,10,12],    gateBias:[1.0,0.7,0.85,0.6,0.9,0.5,0.75,0.4,0.85,0.55,0.7,0.45,0.8,0.5,0.65,0.35], tieBias:0.30, restBias:0.12, octaveDown:0.18, octaveUp:0.08 }
 };
 const GEN_STYLES = { acid:true, funk:true, techno:true, goa:false, arp:false, fib:false, bass:false };
-let GEN_EQUATION = 'off'; // 'off' | 'fibonacci' | 'golden' | 'pi' | 'euler' | 'lucas' | 'primes'
-let GEN_LONG_NOTES = false; // allow 2 and 3-step note lengths via TIE chains
+let GEN_EQUATION = 'off'; // 'off' | 'fibonacci' | 'golden' | 'pi' | 'euler' | 'lucas' | 'primes' | 'rise' | 'spiral'
+let GEN_LONG_NOTES = false;
+
+function toggleGenLong() {
+  GEN_LONG_NOTES = !GEN_LONG_NOTES;
+  document.getElementById('gen-long').className = 'gs' + (GEN_LONG_NOTES ? ' on' : '');
+}
 
 function genEquation(eq) {
   if (eq === 'off') {
@@ -2195,7 +2140,7 @@ function genEquation(eq) {
   } else {
     GEN_EQUATION = (GEN_EQUATION === eq) ? 'off' : eq;
   }
-  const eqIds = ['off','fibonacci','golden','pi','euler','lucas','primes'];
+  const eqIds = ['off','fibonacci','golden','pi','euler','lucas','primes','rise','spiral'];
   eqIds.forEach(k => {
     const el = document.getElementById('ge-'+k);
     if (el) el.className = 'gs' + ((k === 'off' ? GEN_EQUATION === 'off' : GEN_EQUATION === k) ? ' on' : '');
@@ -2232,45 +2177,6 @@ function genStyle(s) {
   document.getElementById('gs-fib').className    = 'gs'+(GEN_STYLES.fib    ?' on':'');
   document.getElementById('gs-bass').className   = 'gs'+(GEN_STYLES.bass   ?' on':'');
 }
-function genLongNotes() {
-  GEN_LONG_NOTES = !GEN_LONG_NOTES;
-  document.getElementById('gs-longnotes').className = 'gs' + (GEN_LONG_NOTES ? ' on' : '');
-}
-
-// After a pattern is fully generated, extend some 'on' steps to 2 or 3 steps
-// by chaining TIE steps. Respects density: low density = rare longs, high = more.
-// Only applies when GEN_LONG_NOTES is enabled.
-function applyLongNotes(steps, len, density) {
-  if (!GEN_LONG_NOTES) return;
-  // probability of starting a long note at any 'on' step
-  const longProb = 0.10 + (density - 1) / 9 * 0.30; // 10% at density 1, 40% at density 10
-  let i = 0;
-  while (i < len) {
-    const s = steps[i];
-    if (s.gate === 'on' && Math.random() < longProb) {
-      // choose length 2 or 3 (weighted: 2 is more common)
-      const ext = Math.random() < 0.65 ? 1 : 2; // 1 or 2 extra TIE steps
-      for (let e = 1; e <= ext; e++) {
-        const ti = i + e;
-        if (ti >= len) break;
-        // Only overwrite rest or existing tie, never another note-on
-        if (steps[ti].gate === 'rest' || steps[ti].gate === 'tie') {
-          steps[ti].gate  = 'tie';
-          steps[ti].pitch = 0;
-          steps[ti].octave = 0;
-          steps[ti].accent = false;
-          steps[ti].slide  = false;
-        } else {
-          break; // hit another note-on, stop extending
-        }
-      }
-      i += ext + 1; // skip the steps we just tied
-    } else {
-      i++;
-    }
-  }
-}
-
 function genOpen()  {
   document.getElementById('gen-overlay').style.display='flex';
 }
@@ -2387,7 +2293,7 @@ function genArp(closeAfter) {
       }
 
       // Occasional tie for legato feel
-      if (i > pos && steps[i-1].gate === 'on' && Math.random() < 0.12) {
+      if (GEN_LONG_NOTES && i > pos && steps[i-1].gate === 'on' && Math.random() < 0.12) {
         s.gate='tie'; s.pitch=0; s.octave=0; s.accent=false; s.slide=false;
         continue;
       }
@@ -2447,6 +2353,24 @@ const MATH_SEQUENCES = {
     const primes = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71];
     return primes.slice(0,n);
   },
+  rise: (n) => {
+    // Strictly ascending: maps each step to increasing scale degrees.
+    // step i → degree i mod scaleLength, guaranteed to only climb.
+    return Array.from({length:n}, (_,i) => i);
+  },
+  spiral: (n) => {
+    // Spiral: ascending in overlapping waves. Think of it as a helix viewed from above:
+    // each cycle climbs the full scale, but resets to the middle rather than zero,
+    // so it always stays higher than the previous cycle's start.
+    // Concretely: cycle through 0..L-1, then L/2..L*1.5-1, then L..L*2-1...
+    // This is genuinely different from Rise: Rise is a single ramp; Spiral is
+    // a ramp that resets mid-way up, creating overlapping ascending phrases.
+    return Array.from({length:n}, (_,i) => {
+      const cycle = Math.floor(i / 4);   // which spiral cycle (0,1,2,...)
+      const pos   = i % 4;               // position within cycle (0-3)
+      return cycle * 2 + pos;            // offset by 2 each cycle = always ascending but with reset overlap
+    });
+  },
 };
 
 // Pick which sequences to use based on chaos level
@@ -2493,7 +2417,7 @@ function genFib(closeAfter) {
     }
 
     // Tie: golden ratio proximity creates natural legato clusters
-    if (i > 0 && steps[i-1].gate === 'on') {
+    if (GEN_LONG_NOTES && i > 0 && steps[i-1].gate === 'on') {
       const goldenVal = goldenSeq[i % goldenSeq.length];
       const tieProbBase = chaos > 5 ? 0.08 : 0.15;
       if (goldenVal < 2 && Math.random() < tieProbBase) {
@@ -2720,7 +2644,6 @@ function genBass(closeAfter) {
   }
 
   for(let i=len;i<16;i++){steps[i].gate='rest';steps[i].pitch=0;steps[i].octave=0;steps[i].accent=false;steps[i].slide=false;}
-  applyLongNotes(steps, len, density);
   renderSeq();
   if (closeAfter) genClose();
   const flavour = pool === REPT_CELLS ? 'REPT' : cMod < 0.3 ? 'SPARSE' : cMod < 0.6 ? 'GROOVE' : pool === PUMP_CELLS ? 'PUMP' : 'SYNCO';
@@ -2760,7 +2683,7 @@ function genRunCore(closeAfter) {
     const s=steps[i];
     const restProb=tbl.restBias*dMod*(1-tbl.gateBias[i]*0.5);
     if(Math.random()<restProb){ s.gate='rest';s.pitch=0;s.octave=0;s.accent=false;s.slide=false; continue; }
-    if(i>0&&steps[i-1].gate==='on'&&Math.random()<tbl.tieBias){ s.gate='tie';s.pitch=0;s.octave=0;s.accent=false;s.slide=false; continue; }
+    if(GEN_LONG_NOTES && i>0&&steps[i-1].gate==='on'&&Math.random()<tbl.tieBias){ s.gate='tie';s.pitch=0;s.octave=0;s.accent=false;s.slide=false; continue; }
     const rawPitch = Math.random()<cMod*0.4 ? Math.floor(Math.random()*12) : tbl.intervals[Math.floor(Math.random()*tbl.intervals.length)]%12;
     let pitch = snapToScale(rawPitch, GEN_SCALE);
     // EQUATION blend: chaos controls how dominant the equation is (low=subtle, high=dominant)
@@ -2776,7 +2699,6 @@ function genRunCore(closeAfter) {
     s.slide=(i<len-1)&&Math.random()<(slideP/10)*0.5;
   }
   for(let i=len;i<16;i++){steps[i].gate='rest';steps[i].pitch=0;steps[i].octave=0;steps[i].accent=false;steps[i].slide=false;}
-  applyLongNotes(steps, len, density);
   renderSeq();
   if (closeAfter) genClose();
   flash('GENERATED · '+active.join('+').toUpperCase()+' · '+GEN_SCALE.toUpperCase()+(GEN_EQUATION!=='off'?' · EQ:'+GEN_EQUATION.toUpperCase():''));
@@ -2816,6 +2738,8 @@ function genRunCore(closeAfter) {
       <button class="gs"    id="ge-euler"     onclick="genEquation('euler')"     >e EULER</button>
       <button class="gs"    id="ge-lucas"     onclick="genEquation('lucas')"     >LUCAS</button>
       <button class="gs"    id="ge-primes"    onclick="genEquation('primes')"    >PRIMES</button>
+      <button class="gs"    id="ge-rise"      onclick="genEquation('rise')"      >↑ RISE</button>
+      <button class="gs"    id="ge-spiral"    onclick="genEquation('spiral')"    >↺ SPIRAL</button>
     </div>
     <div class="gen-row">
       <span class="gen-lbl">DENSITY</span>
@@ -2837,13 +2761,9 @@ function genRunCore(closeAfter) {
       <input class="gen-slider" type="range" id="gen-accent" min="0" max="10" value="4" oninput="document.getElementById('gv-accent').textContent=this.value">
       <span class="gen-val" id="gv-accent">4</span>
     </div>
-    <div class="gen-row">
-      <span class="gen-lbl">NOTE LEN</span>
-      <button class="gs" id="gs-longnotes" onclick="genLongNotes()" title="Allow notes spanning 2 or 3 steps (TIE chains)">LONG NOTES</button>
-      <span style="font-size:8px;color:#3d4f68;letter-spacing:0.8px">2–3 STEP TIES</span>
-    </div>
     <div class="gen-btns">
       <button class="gen-go"    onclick="genRun()">⚡ GENERATE</button>
+      <button class="gs" id="gen-long" onclick="toggleGenLong()" style="padding:10px 14px">LONG NOTES</button>
       <button class="gen-close" onclick="genClose()">CLOSE</button>
     </div>
   </div>
