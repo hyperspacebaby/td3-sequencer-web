@@ -18,6 +18,8 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
 .mode-buttons{display:flex;gap:5px;flex-wrap:wrap}
 .mode-btn{padding:6px 9px;border-radius:6px;background:#0e1014;border:1px solid #2a2d34;font-family:'Courier New',monospace;font-size:9px;font-weight:700;letter-spacing:1.2px;color:#6e7480;cursor:pointer;transition:all 0.15s}
 .mode-btn.active{border-color:#5cd0ff;background:#0e1a26;color:#9be4ff;box-shadow:0 0 6px #5cd0ff88}
+.mode-btn.hallucinate-on{border-color:#c084fc;background:#1a0e2e;color:#e0aaff;box-shadow:0 0 8px #c084fc88;animation:hallucinate-pulse 1.4s ease-in-out infinite}
+@keyframes hallucinate-pulse{0%,100%{box-shadow:0 0 6px #c084fc66}50%{box-shadow:0 0 14px #c084fccc}}
 .metal-spacer{flex:1}
 .status-col{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
 .midi-badge{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;cursor:pointer;border:1px solid #3a3f48;background:#1a1d22;font-size:9px;font-weight:700;letter-spacing:1px;color:#cfd5dd}
@@ -225,6 +227,7 @@ h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,
     <button class="mode-btn" id="btn-weave" data-mode="weave" onclick="applyMode('weave')">WEAVE</button>
     <button class="mode-btn" id="btn-octflip" data-mode="octflip" onclick="applyMode('octflip')">OCT FLIP</button>
     <button class="mode-btn" id="btn-nudge" onclick="nudgeVariation()" title="Add a small scale-aware variation to the pattern">VARIATION</button>
+    <button class="mode-btn" id="btn-hallucinate" onclick="toggleHallucinate()" title="Generate a new pattern each end of bar">✦ HALLUCINATE</button>
   </div>
   <div class="metal-spacer"></div>
   <div class="status-col">
@@ -388,6 +391,7 @@ let state = {
   midiAccess:null, midiConnected:false,
   stepRef:0, dirRef:1, intervalId:null,
   invertPhase:0,
+  hallucinate:false,
   slideTime: 64,          // CC#5 Portamento Time sent to TD-3 (0-127)
   // MIDI clock reception
   clockMode:false,
@@ -582,8 +586,10 @@ function onMidiClockMessage(e) {
     state.clockPulse = (state.clockPulse + 1) % 6;
     if (state.clockPulse === 0) {
       const len = Math.max(1, state.pattern.length);
+      const prev = state.stepRef;
       state.stepRef = nextIndex(state.stepRef, len);
       state.currentStep = state.stepRef;
+      hallucinateCheck(prev, state.stepRef);
       playStep(state.stepRef);
       renderStepHighlight();
     }
@@ -639,8 +645,10 @@ function scheduleNextStep(){
   const delay = swingDelayMs(state.stepRef); // delay until next step = current step's duration
   state.intervalId = setTimeout(()=>{
     if(!state.isPlaying) return;
+    const prev = state.stepRef;
     state.stepRef = next;
     state.currentStep = state.stepRef;
+    hallucinateCheck(prev, state.stepRef);
     playStep(state.stepRef);
     renderStepHighlight();
     scheduleNextStep();
@@ -1390,6 +1398,32 @@ function nudgeVariation() {
   flash('VARIATION · ' + GEN_SCALE.toUpperCase());
 }
 
+function toggleHallucinate() {
+  state.hallucinate = !state.hallucinate;
+  const btn = document.getElementById('btn-hallucinate');
+  if (state.hallucinate) {
+    btn.classList.add('hallucinate-on');
+    flash('✦ HALLUCINATE · ON · ' + GEN_SCALE.toUpperCase());
+  } else {
+    btn.classList.remove('hallucinate-on');
+    flash('✦ HALLUCINATE · OFF');
+  }
+}
+
+// Called on every step advance. Fires a silent pattern regeneration whenever
+// the sequencer wraps back to the start of the bar (any pattern length).
+function hallucinateCheck(prevStep, nextStep) {
+  if (!state.hallucinate) return;
+  // Bar end = next step is step 0 (forward wrap) OR next <= prev in a mode
+  // that cycles linearly. We treat "next < prev" OR "next === 0 after len-1"
+  // as the universal bar-boundary signal.
+  const len = state.pattern.length;
+  const wrapped = (nextStep === 0) || (nextStep < prevStep && state.mode !== 'bounce' && state.mode !== 'invert');
+  if (wrapped) {
+    genRunCore(false); // generate in-place, keep sequencer running
+  }
+}
+
 // Toast
 function flash(msg){
   const t=document.getElementById('toast');
@@ -2076,17 +2110,41 @@ const GEN_TABLES = {
   techno: { intervals:[0,0,0,0,0,0,7,7,12,5,3,10],             gateBias:[1.0,0.2,0.3,0.2,0.85,0.15,0.25,0.2,0.85,0.2,0.3,0.15,0.8,0.15,0.25,0.2], tieBias:0.10, restBias:0.45, octaveDown:0.10, octaveUp:0.05 },
   goa:    { intervals:[0,0,0,0,0,1,1,4,4,7,7,7,8,8,10,12],    gateBias:[1.0,0.7,0.85,0.6,0.9,0.5,0.75,0.4,0.85,0.55,0.7,0.45,0.8,0.5,0.65,0.35], tieBias:0.30, restBias:0.12, octaveDown:0.18, octaveUp:0.08 }
 };
-const GEN_STYLES = { acid:true, funk:true, techno:true, goa:false, arp:false };
+const GEN_STYLES = { acid:true, funk:true, techno:true, goa:false, arp:false, fib:false, bass:false };
+let GEN_EQUATION = 'off'; // 'off' | 'fibonacci' | 'golden' | 'pi' | 'euler' | 'lucas' | 'primes'
+
+function genEquation(eq) {
+  if (eq === 'off') {
+    GEN_EQUATION = 'off';
+  } else {
+    GEN_EQUATION = (GEN_EQUATION === eq) ? 'off' : eq;
+  }
+  const eqIds = ['off','fibonacci','golden','pi','euler','lucas','primes'];
+  eqIds.forEach(k => {
+    const el = document.getElementById('ge-'+k);
+    if (el) el.className = 'gs' + ((k === 'off' ? GEN_EQUATION === 'off' : GEN_EQUATION === k) ? ' on' : '');
+  });
+}
+
+// Apply equation sequence to nudge a pitch toward math-derived scale degree.
+// blend 0-1: 0 = style wins, 1 = equation wins
+function applyEquationPitch(stepIdx, sc, blend) {
+  if (GEN_EQUATION === 'off') return null;
+  const seq = MATH_SEQUENCES[GEN_EQUATION === 'golden' ? 'golden' : GEN_EQUATION](32);
+  const rawVal = seq[stepIdx % seq.length];
+  const scDegree = rawVal % sc.length;
+  return sc[scDegree];
+}
 
 function genStyle(s) {
-  // ARP is exclusive — it has its own generator path
-  if (s === 'arp') {
-    const wasOn = GEN_STYLES.arp;
+  const exclusive = ['arp', 'fib', 'bass'];
+  if (exclusive.includes(s)) {
+    const wasOn = GEN_STYLES[s];
     Object.keys(GEN_STYLES).forEach(k => GEN_STYLES[k] = false);
-    GEN_STYLES.arp = !wasOn;
-    if (!GEN_STYLES.arp) GEN_STYLES.acid = true; // fallback
+    GEN_STYLES[s] = !wasOn;
+    if (!Object.values(GEN_STYLES).some(v=>v)) GEN_STYLES.acid = true;
   } else {
-    GEN_STYLES.arp = false;
+    exclusive.forEach(k => GEN_STYLES[k] = false);
     GEN_STYLES[s] = !GEN_STYLES[s];
     if (!Object.values(GEN_STYLES).some(v=>v)) GEN_STYLES[s] = true;
   }
@@ -2095,6 +2153,8 @@ function genStyle(s) {
   document.getElementById('gs-techno').className = 'gs'+(GEN_STYLES.techno ?' on':'');
   document.getElementById('gs-goa').className    = 'gs'+(GEN_STYLES.goa    ?' on':'');
   document.getElementById('gs-arp').className    = 'gs'+(GEN_STYLES.arp    ?' on':'');
+  document.getElementById('gs-fib').className    = 'gs'+(GEN_STYLES.fib    ?' on':'');
+  document.getElementById('gs-bass').className   = 'gs'+(GEN_STYLES.bass   ?' on':'');
 }
 function genOpen()  {
   document.getElementById('gen-overlay').style.display='flex';
@@ -2234,6 +2294,323 @@ function genArp(closeAfter) {
   flash('ARP · ' + sc.toUpperCase() + ' · ' + chordCount + ' CHORD' + (chordCount>1?'S':''));
 }
 
+// ─── FIBONACCI / MATHEMATICAL GENERATOR ─────────────────────────────────────
+// Derives pitch, rhythm, and octave from real mathematical sequences:
+// Fibonacci, Pi digits, Golden Ratio, Euler's e, Lucas numbers, Primes.
+// chaos selects which sequence(s) are active; density controls rest threshold.
+
+const MATH_SEQUENCES = {
+  fibonacci: (n) => {
+    // Classic Fibonacci: 1,1,2,3,5,8,13,21,34,55...
+    // Use digit sum mod 12 for pitch, direct value mod 2 for gate
+    const seq = [1,1]; while(seq.length < n+2) seq.push(seq[seq.length-1]+seq[seq.length-2]);
+    return seq.slice(0,n);
+  },
+  lucas: (n) => {
+    // Lucas numbers: 2,1,3,4,7,11,18,29... (Fibonacci cousin, different feel)
+    const seq = [2,1]; while(seq.length < n+2) seq.push(seq[seq.length-1]+seq[seq.length-2]);
+    return seq.slice(0,n);
+  },
+  pi: (n) => {
+    // Pi digits: 3,1,4,1,5,9,2,6,5,3,5,8,9,7,9,3...
+    const digits = [3,1,4,1,5,9,2,6,5,3,5,8,9,7,9,3,2,3,8,4,6,2,6,4,3,3,8,3,2,7,9,5];
+    return digits.slice(0,n);
+  },
+  euler: (n) => {
+    // e digits: 2,7,1,8,2,8,1,8,2,8,4,5,9,0,4,5...
+    const digits = [2,7,1,8,2,8,1,8,2,8,4,5,9,0,4,5,2,3,5,3,6,0,2,8,7,4,7,1,3,5,2,6];
+    return digits.slice(0,n);
+  },
+  golden: (n) => {
+    // Golden ratio φ=1.6180339887... — fractional digits scaled to 0-11
+    // φ^k mod 1 * 12 gives a quasi-random but structured pitch sequence
+    const phi = 1.6180339887498948482;
+    return Array.from({length:n}, (_,i) => Math.floor(((phi * (i+1)) % 1) * 12));
+  },
+  primes: (n) => {
+    // Prime numbers: 2,3,5,7,11,13,17,19,23,29,31,37...
+    const primes = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71];
+    return primes.slice(0,n);
+  },
+};
+
+// Pick which sequences to use based on chaos level
+function mathSequenceNames(chaos) {
+  if (chaos <= 2) return ['fibonacci'];
+  if (chaos <= 4) return ['fibonacci', 'golden'];
+  if (chaos <= 6) return ['fibonacci', 'pi', 'golden'];
+  if (chaos <= 8) return ['lucas', 'pi', 'euler', 'golden'];
+  return ['fibonacci', 'lucas', 'pi', 'euler', 'golden', 'primes'];
+}
+
+function genFib(closeAfter) {
+  const density = parseInt(document.getElementById('gen-density').value);
+  const chaos   = parseInt(document.getElementById('gen-chaos').value);
+  const slideP  = parseInt(document.getElementById('gen-slide').value);
+  const accentP = parseInt(document.getElementById('gen-accent').value);
+  const len     = state.pattern.length;
+  const steps   = state.pattern.steps;
+  const sc      = SCALES[GEN_SCALE] || SCALES.minor;
+
+  const seqNames = mathSequenceNames(chaos);
+  // Build all chosen sequences up to length needed
+  const seqs = seqNames.map(name => MATH_SEQUENCES[name](32));
+
+  // rest threshold: density=1 → very sparse, density=10 → almost full
+  const restThreshold = 0.75 - (density - 1) / 9 * 0.68;
+
+  // Fibonacci gate rhythm: if fib[i] is even → note, odd → rest (with density override)
+  const fibSeq  = MATH_SEQUENCES.fibonacci(32);
+  const goldenSeq = MATH_SEQUENCES.golden(32);
+
+  const usedSeqName = seqNames[0]; // primary sequence label for flash
+
+  for (let i = 0; i < len; i++) {
+    const s = steps[i];
+
+    // ── GATE: driven by Fibonacci parity + density ──────────────────────────
+    // Fibonacci even/odd gives a natural long-short rhythmic pattern
+    const fibGate = fibSeq[i % fibSeq.length] % 2 === 0;
+    const gateProb = fibGate ? (1 - restThreshold * 0.5) : (1 - restThreshold);
+    if (Math.random() > gateProb) {
+      s.gate='rest'; s.pitch=0; s.octave=0; s.accent=false; s.slide=false;
+      continue;
+    }
+
+    // Tie: golden ratio proximity creates natural legato clusters
+    if (i > 0 && steps[i-1].gate === 'on') {
+      const goldenVal = goldenSeq[i % goldenSeq.length];
+      const tieProbBase = chaos > 5 ? 0.08 : 0.15;
+      if (goldenVal < 2 && Math.random() < tieProbBase) {
+        s.gate='tie'; s.pitch=0; s.octave=0; s.accent=false; s.slide=false;
+        continue;
+      }
+    }
+
+    // ── PITCH: if equation is set, use it exclusively; otherwise blend sequences ─
+    let pitch, scDegree;
+    if (GEN_EQUATION !== 'off') {
+      // Pure equation pitch — this IS the ∑ MATH mode with explicit equation
+      const eqSeq = MATH_SEQUENCES[GEN_EQUATION === 'golden' ? 'golden' : GEN_EQUATION](32);
+      const eqRaw = eqSeq[i % eqSeq.length];
+      scDegree = eqRaw % sc.length;
+      pitch = sc[scDegree];
+    } else {
+      // XOR/sum values from multiple chaos-selected sequences
+      let rawVal = 0;
+      seqs.forEach((seq, si) => {
+        const v = seq[((i * (si + 1) * 3) + si * 7) % seq.length];
+        rawVal = si === 0 ? v : (rawVal + v) % 144;
+      });
+      scDegree = rawVal % sc.length;
+      pitch = sc[scDegree];
+    }
+
+    // Goa bent note chance if in goa scale
+    if (GEN_SCALE === 'goa' && GOA_BEND_DEGREES.includes(scDegree) && Math.random() < GOA_BEND_CHANCE) {
+      pitch = (pitch + (Math.random() < 0.5 ? -1 : 1) + 12) % 12;
+    }
+
+    // ── OCTAVE: derived from Lucas or Fibonacci mod 3 → maps to -1, 0, 1 ──
+    const lucasSeq = MATH_SEQUENCES.lucas(32);
+    const octVal   = lucasSeq[i % lucasSeq.length] % 3;
+    // At low chaos keep mostly mid octave, high chaos allows full range
+    const octave   = chaos > 6
+      ? octVal - 1                         // -1, 0, or 1
+      : octVal === 0 ? -1 : 0;             // only -1 or 0 (lower, grounded)
+
+    // ── ACCENT: prime positions get accented ─────────────────────────────────
+    const primes = [0, 2, 4, 7, 11, 13]; // prime step indices
+    const isAccentStep = primes.includes(i);
+    s.gate   = 'on';
+    s.pitch  = pitch;
+    s.octave = octave;
+    s.accent = isAccentStep && Math.random() < (accentP / 10) * 0.9;
+    s.slide  = i < len - 1 && Math.random() < (slideP / 10) * 0.45;
+  }
+
+  for(let i=len;i<16;i++){steps[i].gate='rest';steps[i].pitch=0;steps[i].octave=0;steps[i].accent=false;steps[i].slide=false;}
+  renderSeq();
+  if (closeAfter) genClose();
+  flash('∑ MATH · ' + (GEN_EQUATION !== 'off' ? GEN_EQUATION.toUpperCase() : seqNames.slice(0,2).join('+').toUpperCase()) + ' · ' + GEN_SCALE.toUpperCase());
+}
+
+// ─── BASS GENERATOR ──────────────────────────────────────────────────────────
+// Minimal root-note patterns. The pattern is one cell (4 steps) repeated ×4.
+// Density controls how many notes per cell (1-4). Chaos shifts the octave
+// pattern and occasionally drops a colour note from the scale.
+// Step 1 (index 0) is the kick zone — if it gets a note, octave goes UP.
+// Step 9 (index 8) is the snare pocket — accent lives here.
+
+function genBass(closeAfter) {
+  const density = parseInt(document.getElementById('gen-density').value);
+  const chaos   = parseInt(document.getElementById('gen-chaos').value);
+  const slideP  = parseInt(document.getElementById('gen-slide').value);
+  const accentP = parseInt(document.getElementById('gen-accent').value);
+  const len     = state.pattern.length;
+  const steps   = state.pattern.steps;
+  const sc      = SCALES[GEN_SCALE] || SCALES.minor;
+  const root    = sc[0];
+  const cMod    = (chaos - 1) / 9;  // 0..1
+
+  // ── CELL TEMPLATES ───────────────────────────────────────────────────────
+  // 4 steps per cell, each entry is: hit (bool), octave (-1=dn, 0=mid, 1=up)
+  // These are the exact patterns from the design session — simple & honest.
+  // [step0, step1, step2, step3] each = {h, o}
+  const CELLS = [
+    // — — C —  (the classic)
+    [{h:0,o:0},{h:0,o:0},{h:1,o:0},{h:0,o:0}],
+    // — C — —  (late entry)
+    [{h:0,o:0},{h:1,o:0},{h:0,o:0},{h:0,o:0}],
+    // C — — —  (on the beat, kick zone → handled below)
+    [{h:1,o:1},{h:0,o:0},{h:0,o:0},{h:0,o:0}],
+    // — — — C  (anticipation)
+    [{h:0,o:0},{h:0,o:0},{h:0,o:0},{h:1,o:0}],
+    // C — C —  (trance skeleton)
+    [{h:1,o:1},{h:0,o:0},{h:1,o:-1},{h:0,o:0}],
+    // — C — C  (offbeat pulse)
+    [{h:0,o:0},{h:1,o:0},{h:0,o:0},{h:1,o:-1}],
+    // C — — C  (sparse bookend)
+    [{h:1,o:1},{h:0,o:0},{h:0,o:0},{h:1,o:-1}],
+    // — C C —  (double hit mid)
+    [{h:0,o:0},{h:1,o:0},{h:1,o:-1},{h:0,o:0}],
+  ];
+
+  // Trance pump cells (full, used at high density/chaos)
+  const PUMP_CELLS = [
+    // C dn dn dn
+    [{h:1,o:1},{h:1,o:-1},{h:1,o:-1},{h:1,o:-1}],
+    // C — dn dn
+    [{h:1,o:1},{h:0,o:0},{h:1,o:-1},{h:1,o:-1}],
+    // C dn — dn
+    [{h:1,o:1},{h:1,o:-1},{h:0,o:0},{h:1,o:-1}],
+  ];
+
+  // Synco cells
+  const SYNCO_CELLS = [
+    // — — C —  (the "+" of the beat)
+    [{h:0,o:0},{h:0,o:0},{h:1,o:0},{h:0,o:0}],
+    // — C — —  shifted
+    [{h:0,o:0},{h:1,o:0},{h:0,o:0},{h:0,o:0}],
+    // — — C C  push
+    [{h:0,o:0},{h:0,o:0},{h:1,o:0},{h:1,o:-1}],
+    // C — — C  3+3+2 seed
+    [{h:1,o:0},{h:0,o:0},{h:0,o:0},{h:1,o:-1}],
+  ];
+
+  // ── "empty C C C" REPETITION CELLS ───────────────────────────────────────
+  // The core bassline repetition idea: first step is rest, steps 2-4 are hits.
+  // This creates the "_ C C C | _ C C C | _ C C C | _ C C C" phrase when
+  // the same cell is repeated across all 4 beats — the backbone of a locked
+  // groove. Multiple octave shadings keep it from being static.
+  const REPT_CELLS = [
+    // — C C C  (pure: rest then three hits, all mid)
+    [{h:0,o:0},{h:1,o:0},{h:1,o:0},{h:1,o:0}],
+    // — C C C  (root → down → down: drives toward floor)
+    [{h:0,o:0},{h:1,o:0},{h:1,o:-1},{h:1,o:-1}],
+    // — C C C  (root → mid → up: rising push)
+    [{h:0,o:0},{h:1,o:0},{h:1,o:0},{h:1,o:1}],
+    // — C C C  (root → up → down: arc shape)
+    [{h:0,o:0},{h:1,o:1},{h:1,o:0},{h:1,o:-1}],
+    // — — C C  (two-rest variant for slight sparseness)
+    [{h:0,o:0},{h:0,o:0},{h:1,o:0},{h:1,o:0}],
+    // — C — C  (dotted-feel: every other hit after a rest)
+    [{h:0,o:0},{h:1,o:0},{h:0,o:0},{h:1,o:-1}],
+  ];
+
+  // ── PICK ONE CELL based on chaos ─────────────────────────────────────────
+  // REPT_CELLS ("empty C C C" x4) are strongly favoured — they appear ~50%
+  // of the time across ALL chaos levels, as the default bassline repetition
+  // phrase. Higher chaos layers in pump or synco, but the rept pool is always
+  // in contention.
+  let pool;
+  const reptRoll = Math.random();
+  if (reptRoll < 0.50) {
+    // 50% chance at any chaos level → locked "_ C C C" x4 repetition
+    pool = REPT_CELLS;
+  } else if (cMod < 0.3) {
+    pool = CELLS.slice(0, 4);          // sparse cells
+  } else if (cMod < 0.6) {
+    pool = CELLS;                      // all simple cells
+  } else if (Math.random() < 0.5) {
+    pool = PUMP_CELLS;                 // trance pump
+  } else {
+    pool = SYNCO_CELLS;               // syncopated
+  }
+  const cell = pool[Math.floor(Math.random() * pool.length)];
+
+  // ── DENSITY: how many of the 4 beat-cells actually fire ──────────────────
+  // density 1-3 → ~1-2 beats active, density 7-10 → all 4 beats active
+  // We repeat the chosen cell across all 4 beats, then drop some by density.
+  const beatKeepProb = 0.15 + (density - 1) / 9 * 0.85;
+
+  // Beat 3 (steps 8-11, beat index 2) is the snare pocket — always kept.
+  // When a REPT cell is chosen, ALL beats stay active so the "_ C C C" x4
+  // phrase locks in uniformly across the full 16 steps.
+  const beatActive = pool === REPT_CELLS
+    ? [true, true, true, true]
+    : [0,1,2,3].map(b => b === 2 ? true : Math.random() < beatKeepProb);
+
+  // ── BUILD THE 16-STEP PATTERN ─────────────────────────────────────────────
+  for (let beat = 0; beat < 4; beat++) {
+    for (let sub = 0; sub < 4; sub++) {
+      const i = beat * 4 + sub;
+      const st = steps[i];
+      const cell_step = cell[sub];
+
+      if (!beatActive[beat] || !cell_step.h) {
+        st.gate='rest'; st.pitch=0; st.octave=0; st.accent=false; st.slide=false;
+        continue;
+      }
+
+      // ── PITCH ──────────────────────────────────────────────────────────
+      // Root most of the time. Chaos occasionally drops a colour note.
+      // Colour note = any scale degree other than root, picked randomly.
+      let pitch = root;
+      const colourChance = cMod * 0.25; // max 25% colour notes at chaos=10
+      if (sc.length > 1 && Math.random() < colourChance) {
+        const colourDegrees = sc.slice(1); // everything except root
+        pitch = colourDegrees[Math.floor(Math.random() * colourDegrees.length)];
+      }
+
+      // ── OCTAVE ─────────────────────────────────────────────────────────
+      let oct = cell_step.o;
+
+      // Kick zone: step index 0 (beat 0, sub 0) and index 4 (beat 1, sub 0)
+      // If a note lands here, force octave UP so it sits above the kick.
+      if (sub === 0 && (beat === 0 || beat === 1)) {
+        oct = 1;
+      }
+
+      // Chaos can flip occasional octaves for movement
+      if (cMod > 0.5 && Math.random() < cMod * 0.2) {
+        oct = oct === 0 ? -1 : oct * -1;
+      }
+
+      // ── ACCENT ─────────────────────────────────────────────────────────
+      const isSnare = (beat === 2 && sub === 0); // step 9
+      st.accent = isSnare
+        ? Math.random() < 0.90
+        : Math.random() < (accentP / 10) * 0.25;
+
+      // ── SLIDE ──────────────────────────────────────────────────────────
+      const nextI = i + 1;
+      const nextHit = nextI < len && cell[(sub + 1) % 4].h && beatActive[Math.floor(nextI / 4)];
+      st.slide = nextHit && Math.random() < (slideP / 10) * 0.6;
+
+      st.gate   = 'on';
+      st.pitch  = pitch;
+      st.octave = oct;
+    }
+  }
+
+  for(let i=len;i<16;i++){steps[i].gate='rest';steps[i].pitch=0;steps[i].octave=0;steps[i].accent=false;steps[i].slide=false;}
+  renderSeq();
+  if (closeAfter) genClose();
+  const flavour = pool === REPT_CELLS ? 'REPT' : cMod < 0.3 ? 'SPARSE' : cMod < 0.6 ? 'GROOVE' : pool === PUMP_CELLS ? 'PUMP' : 'SYNCO';
+  flash('BASS · ' + flavour + ' · ' + GEN_SCALE.toUpperCase());
+}
+
 function genBlend(names) {
   const b={intervals:[],gateBias:Array(16).fill(0),tieBias:0,restBias:0,octaveDown:0,octaveUp:0};
   names.forEach(n=>{
@@ -2249,7 +2626,9 @@ function genBlend(names) {
 function genRun() { genRunCore(true); }
 
 function genRunCore(closeAfter) {
-  if (GEN_STYLES.arp) { genArp(closeAfter); return; }
+  if (GEN_STYLES.arp)  { genArp(closeAfter);  return; }
+  if (GEN_STYLES.fib)  { genFib(closeAfter);  return; }
+  if (GEN_STYLES.bass) { genBass(closeAfter); return; }
   const density = parseInt(document.getElementById('gen-density').value);
   const chaos   = parseInt(document.getElementById('gen-chaos').value);
   const slideP  = parseInt(document.getElementById('gen-slide').value);
@@ -2267,7 +2646,13 @@ function genRunCore(closeAfter) {
     if(Math.random()<restProb){ s.gate='rest';s.pitch=0;s.octave=0;s.accent=false;s.slide=false; continue; }
     if(i>0&&steps[i-1].gate==='on'&&Math.random()<tbl.tieBias){ s.gate='tie';s.pitch=0;s.octave=0;s.accent=false;s.slide=false; continue; }
     const rawPitch = Math.random()<cMod*0.4 ? Math.floor(Math.random()*12) : tbl.intervals[Math.floor(Math.random()*tbl.intervals.length)]%12;
-    const pitch = snapToScale(rawPitch, GEN_SCALE);
+    let pitch = snapToScale(rawPitch, GEN_SCALE);
+    // EQUATION blend: chaos controls how dominant the equation is (low=subtle, high=dominant)
+    if (GEN_EQUATION !== 'off') {
+      const eqBlend = 0.15 + cMod * 0.7; // chaos 1→0.15, chaos 10→0.85
+      const eqPitch = applyEquationPitch(i, SCALES[GEN_SCALE] || SCALES.minor, eqBlend);
+      if (eqPitch !== null && Math.random() < eqBlend) pitch = eqPitch;
+    }
     const octR  = Math.random();
     const octave= octR<tbl.octaveDown?-1:octR<tbl.octaveDown+tbl.octaveUp?1:0;
     s.gate='on'; s.pitch=pitch; s.octave=octave;
@@ -2277,7 +2662,7 @@ function genRunCore(closeAfter) {
   for(let i=len;i<16;i++){steps[i].gate='rest';steps[i].pitch=0;steps[i].octave=0;steps[i].accent=false;steps[i].slide=false;}
   renderSeq();
   if (closeAfter) genClose();
-  flash('GENERATED · '+active.join('+').toUpperCase()+' · '+GEN_SCALE.toUpperCase());
+  flash('GENERATED · '+active.join('+').toUpperCase()+' · '+GEN_SCALE.toUpperCase()+(GEN_EQUATION!=='off'?' · EQ:'+GEN_EQUATION.toUpperCase():''));
 }
 
 </script>
@@ -2293,6 +2678,8 @@ function genRunCore(closeAfter) {
       <button class="gs on" id="gs-techno" onclick="genStyle('techno')">TECHNO</button>
       <button class="gs"    id="gs-goa"    onclick="genStyle('goa')"   >GOA</button>
       <button class="gs"    id="gs-arp"    onclick="genStyle('arp')"   >ARP</button>
+      <button class="gs"    id="gs-fib"    onclick="genStyle('fib')"   >∑ MATH</button>
+      <button class="gs"    id="gs-bass"   onclick="genStyle('bass')"  >BASS</button>
     </div>
     <div class="gen-row">
       <span class="gen-lbl">SCALE</span>
@@ -2302,6 +2689,16 @@ function genRunCore(closeAfter) {
       <button class="gs" id="gs-penta"      onclick="genScale('penta')"     >PENTA</button>
       <button class="gs" id="gs-scale-goa"  onclick="genScale('goa')"       >GOA</button>
       <button class="gs" id="gs-chromatic"  onclick="genScale('chromatic')" >CHROM</button>
+    </div>
+    <div class="gen-row">
+      <span class="gen-lbl">EQUATION</span>
+      <button class="gs on" id="ge-off"       onclick="genEquation('off')"      >OFF</button>
+      <button class="gs"    id="ge-fibonacci" onclick="genEquation('fibonacci')" >FIBONACCI</button>
+      <button class="gs"    id="ge-golden"    onclick="genEquation('golden')"    >φ GOLDEN</button>
+      <button class="gs"    id="ge-pi"        onclick="genEquation('pi')"        >π PI</button>
+      <button class="gs"    id="ge-euler"     onclick="genEquation('euler')"     >e EULER</button>
+      <button class="gs"    id="ge-lucas"     onclick="genEquation('lucas')"     >LUCAS</button>
+      <button class="gs"    id="ge-primes"    onclick="genEquation('primes')"    >PRIMES</button>
     </div>
     <div class="gen-row">
       <span class="gen-lbl">DENSITY</span>
